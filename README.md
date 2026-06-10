@@ -2,6 +2,8 @@
 
 Browser-based target archery simulator. Single-file, no build step — open `index.html` directly.
 
+**▶ Play it here: [raff.github.io/target-archery](https://raff.github.io/target-archery/)**
+
 ---
 
 ## Usage
