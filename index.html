@@ -1,0 +1,1155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Archery Simulator</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #0d1117;
+  color: #c9d1d9;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+header {
+  text-align: center;
+  padding: 10px;
+  background: #161b22;
+  border-bottom: 1px solid #30363d;
+  letter-spacing: 4px;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  color: #58a6ff;
+  flex-shrink: 0;
+}
+main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+#controls {
+  width: 210px;
+  background: #161b22;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-right: 1px solid #30363d;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+.cg { display: flex; flex-direction: column; gap: 5px; }
+.cg h3 {
+  font-size: 0.65rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #8b949e;
+  margin-bottom: 1px;
+}
+.clabel {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  color: #c9d1d9;
+}
+.clabel .val { color: #58a6ff; font-weight: 600; }
+input[type="range"] { width: 100%; accent-color: #58a6ff; cursor: pointer; height: 4px; }
+input[type="range"]:disabled { opacity: 0.45; cursor: default; }
+select {
+  width: 100%;
+  background: #21262d;
+  color: #c9d1d9;
+  border: 1px solid #30363d;
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+select:focus { outline: 1px solid #58a6ff; }
+.info-row {
+  font-size: 0.72rem;
+  color: #8b949e;
+  display: flex;
+  justify-content: space-between;
+}
+.info-row span:last-child { color: #3fb950; font-weight: 600; }
+.spine-btns { display: flex; gap: 3px; }
+.spine-btn {
+  flex: 1;
+  padding: 4px 2px;
+  background: #21262d;
+  border: 1px solid #30363d;
+  color: #8b949e;
+  font-size: 0.72rem;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all 0.12s;
+}
+.spine-btn:hover { border-color: #58a6ff; color: #c9d1d9; }
+.spine-btn.active { background: #1f6feb; border-color: #58a6ff; color: #fff; }
+#spine-desc { font-size: 0.68rem; color: #8b949e; margin-top: 2px; }
+.range-hint {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.65rem;
+  color: #6e7681;
+  margin-top: -3px;
+}
+.range-hint .ref { color: #3fb950; }
+.wind-row { display: flex; align-items: center; gap: 6px; font-size: 0.82rem; }
+input[type="checkbox"] { accent-color: #58a6ff; cursor: pointer; }
+#wind-details { font-size: 0.72rem; color: #8b949e; }
+#wind-details span { color: #ffa657; font-weight: 600; }
+#new-wind-btn {
+  font-size: 0.68rem;
+  padding: 2px 6px;
+  background: #21262d;
+  color: #8b949e;
+  border: 1px solid #30363d;
+  border-radius: 3px;
+  cursor: pointer;
+}
+#new-wind-btn:hover { color: #c9d1d9; }
+.shoot-btn {
+  width: 100%;
+  padding: 11px;
+  background: linear-gradient(135deg, #238636, #2ea043);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 3px;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: opacity 0.1s, transform 0.1s;
+  margin-top: 4px;
+}
+.shoot-btn:active { transform: scale(0.97); opacity: 0.85; }
+.reset-btn {
+  width: 100%;
+  padding: 6px;
+  background: transparent;
+  color: #6e7681;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.reset-btn:hover { color: #c9d1d9; border-color: #6e7681; }
+#target-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at center, #0d2a0d 0%, #080f08 100%);
+  position: relative;
+  overflow: hidden;
+}
+#distance-label {
+  position: absolute;
+  top: 10px;
+  font-size: 0.75rem;
+  color: #3fb950;
+  letter-spacing: 2px;
+  z-index: 5;
+}
+#wind-banner {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  font-size: 0.75rem;
+  background: rgba(22,27,34,0.85);
+  border: 1px solid #30363d;
+  color: #ffa657;
+  padding: 4px 10px;
+  border-radius: 6px;
+  z-index: 5;
+  display: none;
+}
+#canvas-wrap {
+  position: relative;
+  display: inline-block;
+}
+#target-canvas, #peep-canvas {
+  display: block;
+  width: 500px;
+  height: 500px;
+}
+#peep-canvas {
+  position: absolute;
+  top: 0; left: 0;
+  pointer-events: none;
+}
+#score-bar {
+  position: absolute;
+  bottom: 12px;
+  display: flex;
+  gap: 18px;
+  background: rgba(22,27,34,0.9);
+  border: 1px solid #30363d;
+  padding: 8px 22px;
+  border-radius: 20px;
+  z-index: 5;
+}
+.si { text-align: center; }
+.si .n { font-size: 1.4rem; font-weight: 700; color: #58a6ff; line-height: 1; }
+.si .l { font-size: 0.6rem; color: #6e7681; letter-spacing: 1px; text-transform: uppercase; margin-top: 1px; }
+#stat-strip {
+  position: absolute;
+  bottom: 70px;
+  font-size: 0.68rem;
+  color: #6e7681;
+  display: flex;
+  gap: 14px;
+  z-index: 5;
+}
+#stat-strip span { color: #58a6ff; }
+#score-popup {
+  position: absolute;
+  top: 42%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  font-size: 2.8rem;
+  font-weight: 900;
+  pointer-events: none;
+  z-index: 10;
+  opacity: 0;
+  transition: transform 0.12s cubic-bezier(.34,1.56,.64,1), opacity 0.4s;
+  text-shadow: 0 0 30px currentColor;
+}
+#score-popup.show { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+#flight-panel {
+  flex-shrink: 0;
+  background: #0b0f14;
+  border-top: 1px solid #30363d;
+  display: none;
+}
+#flight-panel.on { display: block; }
+#flight-canvas { display: block; width: 100%; height: 150px; }
+</style>
+</head>
+<body>
+<header>Archery Simulator</header>
+<main>
+  <aside id="controls">
+    <div class="cg">
+      <h3>Distance</h3>
+      <select id="dist-select">
+        <option value="10">10 m — close indoor</option>
+        <option value="18" selected>18 m — indoor standard</option>
+        <option value="30">30 m</option>
+        <option value="50">50 m</option>
+        <option value="60">60 m</option>
+        <option value="70">70 m — Olympic</option>
+      </select>
+    </div>
+    <div class="cg">
+      <div class="clabel"><span>Bow Poundage</span><span class="val" id="v-poundage">40 lb</span></div>
+      <input type="range" id="poundage" min="15" max="70" value="40" step="1">
+    </div>
+    <div class="cg">
+      <div class="info-row"><span>Arrow mass</span><span id="v-mass">340 gr</span></div>
+      <div class="info-row"><span>Arrow speed</span><span id="v-speed">—</span></div>
+      <div class="info-row"><span>Optimal spine</span><span id="v-spine">—</span></div>
+    </div>
+    <div class="cg">
+      <h3>Arrow Spine</h3>
+      <div class="spine-btns">
+        <button class="spine-btn" data-v="-2">-2</button>
+        <button class="spine-btn" data-v="-1">-1</button>
+        <button class="spine-btn active" data-v="0">0</button>
+        <button class="spine-btn" data-v="1">+1</button>
+        <button class="spine-btn" data-v="2">+2</button>
+      </div>
+      <div id="spine-desc">Optimal match</div>
+    </div>
+    <div class="cg">
+      <h3>Sight</h3>
+      <div class="wind-row">
+        <input type="checkbox" id="sight-toggle" checked>
+        <label for="sight-toggle" style="font-size:0.82rem;cursor:pointer">Use sight</label>
+      </div>
+      <div class="clabel"><span>Elevation</span><span class="val" id="v-sight-elev">0</span></div>
+      <input type="range" id="sight-elev" min="-250" max="50" value="0" step="1">
+      <div class="range-hint">
+        <span>250&#8595;</span>
+        <span>Ref: <span class="ref" id="v-zero">—</span></span>
+        <span>50&#8593;</span>
+      </div>
+      <div class="clabel"><span>Windage</span><span class="val" id="v-sight-wind">0</span></div>
+      <input type="range" id="sight-wind" min="-60" max="60" value="0" step="1">
+      <div class="range-hint">
+        <span>60&#8592;</span>
+        <span>ticks</span>
+        <span>60&#8594;</span>
+      </div>
+      <div id="sight-desc" style="font-size:0.68rem;color:#8b949e">Sight &#8595; &#8594; arrow hits &#8593;</div>
+    </div>
+    <div class="cg">
+      <h3>Aiming</h3>
+      <div class="wind-row">
+        <input type="checkbox" id="dynamic-toggle" checked>
+        <label for="dynamic-toggle" style="font-size:0.82rem;cursor:pointer">Bow droop &amp; sway</label>
+      </div>
+      <div id="dyn-hint" style="font-size:0.68rem;color:#8b949e;line-height:1.5">
+        <b style="color:#58a6ff">&#8593;&#8595;</b> raise / lower bow<br>
+        <b style="color:#58a6ff">&#8592;&#8594;</b> swing left / right<br>
+        <b style="color:#58a6ff">Space</b> — shoot
+      </div>
+    </div>
+    <div class="cg">
+      <div class="wind-row">
+        <input type="checkbox" id="wind-toggle">
+        <label for="wind-toggle" style="font-size:0.82rem;cursor:pointer">Wind</label>
+      </div>
+      <div id="wind-details" style="display:none">
+        Wind: <span id="v-wind-info">none</span>
+        <button id="new-wind-btn">New</button>
+      </div>
+    </div>
+    <div class="cg">
+      <h3>View</h3>
+      <div class="wind-row">
+        <input type="checkbox" id="flight-toggle" checked>
+        <label for="flight-toggle" style="font-size:0.82rem;cursor:pointer">Flight side view</label>
+      </div>
+      <div class="wind-row">
+        <input type="checkbox" id="preview-toggle" checked>
+        <label for="preview-toggle" style="font-size:0.82rem;cursor:pointer">Path preview</label>
+      </div>
+    </div>
+    <button class="shoot-btn" id="shoot-btn">SHOOT</button>
+    <button class="reset-btn" id="reset-btn">Clear Arrows</button>
+  </aside>
+  <section id="target-area">
+    <div id="distance-label">18 m — 40 cm target</div>
+    <div id="wind-banner"></div>
+    <div id="canvas-wrap">
+      <canvas id="target-canvas" width="500" height="500"></canvas>
+      <canvas id="peep-canvas" width="500" height="500"></canvas>
+    </div>
+    <div id="stat-strip">
+      <div>Speed: <span id="s-fps">—</span></div>
+      <div>Time: <span id="s-time">—</span></div>
+      <div>Drop @0°: <span id="s-drop">—</span></div>
+    </div>
+    <div id="score-bar">
+      <div class="si"><div class="n" id="s-last">—</div><div class="l">Last</div></div>
+      <div class="si"><div class="n" id="s-total">0</div><div class="l">Total</div></div>
+      <div class="si"><div class="n" id="s-count">0</div><div class="l">Arrows</div></div>
+      <div class="si"><div class="n" id="s-avg">—</div><div class="l">Avg</div></div>
+    </div>
+    <div id="score-popup"></div>
+  </section>
+</main>
+<div id="flight-panel" class="on">
+  <canvas id="flight-canvas" width="800" height="150"></canvas>
+</div>
+<script>
+// ── Constants ─────────────────────────────────────────────────────────────────
+const G = 9.81;
+const SZ = 500;
+const CX = SZ / 2, CY = SZ / 2;
+const FOCAL = 8000;  // pixels — controls how large target appears (and the angular span of the view)
+const TICK_DEG = 0.05; // one sight tick (click) in degrees
+
+const DISTANCES = {
+  10: { face_m: 0.40 },
+  18: { face_m: 0.40 },
+  30: { face_m: 0.80 },
+  50: { face_m: 0.80 },
+  60: { face_m: 1.22 },
+  70: { face_m: 1.22 },
+};
+
+// [score, fill, stroke, outerFraction of face radius]
+const RINGS = [
+  ['X',  '#FFD700', '#DAA520', 0.04],
+  [10,   '#FFE933', '#C8B400', 0.08],
+  [9,    '#FFE933', '#C8B400', 0.16],
+  [8,    '#E53935', '#B71C1C', 0.24],
+  [7,    '#E53935', '#B71C1C', 0.32],
+  [6,    '#1E88E5', '#0D47A1', 0.40],
+  [5,    '#1E88E5', '#0D47A1', 0.52],
+  [4,    '#1A1A1A', '#000',    0.64],
+  [3,    '#1A1A1A', '#000',    0.76],
+  [2,    '#F5F5F5', '#bbb',    0.88],
+  [1,    '#F5F5F5', '#bbb',    1.00],
+];
+
+const SPINE_LABELS = {
+  '-2': 'Very underspined — wide lateral scatter',
+  '-1': 'Slightly underspined',
+   '0': 'Optimal match',
+   '1': 'Slightly overspined',
+   '2': 'Very overspined — wide lateral scatter',
+};
+
+// ── State ─────────────────────────────────────────────────────────────────────
+const S = {
+  dist: 18,
+  poundage: 40,
+  spineErr: 0,
+  elev: 0,       // aim (cursor) elevation, degrees — where the eye/pin points
+  windage: 0,    // aim (cursor) windage, degrees
+  sightOn: true,
+  sightElev: 0,  // sight ticks; + = pin up (arrow hits lower), − = pin down (arrow hits higher)
+  sightWind: 0,  // sight ticks; + = pin right (arrow hits left)
+  windOn: false,
+  wind: { mph: 0, dir: 0 },   // dir: degrees, 0=tailwind, 90=right crosswind
+  arrows: [],
+  total: 0,
+  flightOn: true,   // side-view flight panel + shot animation
+  previewOn: true,  // predicted path arc + impact marker
+  dynamicOn: true,  // keyboard aiming with droop + sway
+};
+
+// ── Physics ───────────────────────────────────────────────────────────────────
+function arrowGrains(lb) { return Math.round(lb * 8.5); }
+function arrowKg(lb)     { return arrowGrains(lb) * 0.00006480; }
+function arrowFps(lb)    { return 100 + lb * 2.2; }
+function arrowMs(lb)     { return arrowFps(lb) * 0.3048; }
+
+function optSpine(lb) {
+  if (lb <= 25) return 1200;
+  if (lb <= 35) return 900;
+  if (lb <= 45) return 700;
+  if (lb <= 55) return 500;
+  if (lb <= 65) return 400;
+  return 340;
+}
+
+function zeroElevDeg() {
+  // Find elevation angle θ such that vertical hit = 0 at distance D
+  // 0 = D·tan(θ) - g·D²/(2·v²·cos²θ)  →  small-angle: θ ≈ g·D / (2·v²)
+  const v = arrowMs(S.poundage), D = S.dist;
+  return Math.atan2(G * D, 2 * v * v) * 180 / Math.PI;
+}
+
+// Actual launch angles = aim + sight offset. Pin moved down (negative ticks)
+// forces the bow up to re-center the pin, so the arrow launches higher.
+function launchElev() { return S.elev - (S.sightOn ? S.sightElev * TICK_DEG : 0); }
+function launchWind() { return S.windage - (S.sightOn ? S.sightWind * TICK_DEG : 0); }
+
+// Launch angles with the pin held dead-center on the target — the sight's zero
+// point. Used by the path preview so it reflects the sight setting, not the
+// momentary cursor position.
+function zeroLaunchElev() { return S.sightOn ? -S.sightElev * TICK_DEG : 0; }
+function zeroLaunchWind() { return S.sightOn ? -S.sightWind * TICK_DEG : 0; }
+
+// Aim clamp: keep the cursor inside the visible canvas at all times
+function aimLimDeg() { return Math.atan2(CY - 16, FOCAL) * 180 / Math.PI; }
+
+function computeHit(elev_deg, windage_deg, noise = true) {
+  const v  = arrowMs(S.poundage);
+  const D  = S.dist;
+  const th = elev_deg   * Math.PI / 180;
+  const ps = windage_deg * Math.PI / 180;
+
+  const t    = D / (v * Math.cos(th));
+  const y_hit = v * Math.sin(th) * t - 0.5 * G * t * t;   // + = up
+  const x_hit = Math.tan(ps) * D;                          // + = right
+
+  // Wind drift
+  let wx = 0, wy = 0;
+  if (S.windOn && S.wind.mph > 0) {
+    const wms  = S.wind.mph * 0.44704;
+    const wrad = S.wind.dir * Math.PI / 180;
+    wx = wms * Math.sin(wrad) * D * 0.00018;   // lateral
+    wy = wms * Math.cos(wrad) * D * 0.00004;   // headwind/tailwind
+  }
+
+  // Spine lateral offset (scales with distance)
+  const sx = S.spineErr * 0.003 * D / 18;
+
+  // Human scatter (angular noise, scales gently with distance)
+  const std = (0.008 + D * 0.0001) * (1 + Math.abs(S.spineErr) * 0.45);
+  const rx = noise ? gauss() * std : 0, ry = noise ? gauss() * std : 0;
+
+  return { x: x_hit + wx + sx + rx, y: y_hit + wy + ry, t };
+}
+
+function gauss() {
+  let u, v;
+  do { u = Math.random(); } while (!u);
+  do { v = Math.random(); } while (!v);
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+function getScore(x, y) {
+  const R = DISTANCES[S.dist].face_m / 2;
+  const frac = Math.sqrt(x*x + y*y) / R;
+  for (const [sc,,, f] of RINGS) if (frac <= f) return sc;
+  return 'M';
+}
+
+function scoreNum(s) { return s === 'X' ? 10 : s === 'M' ? 0 : s; }
+
+// ── Rendering ─────────────────────────────────────────────────────────────────
+const tCvs = document.getElementById('target-canvas');
+const tCtx = tCvs.getContext('2d');
+const pCvs = document.getElementById('peep-canvas');
+const pCtx = pCvs.getContext('2d');
+
+function apparentRadius() {
+  const R = DISTANCES[S.dist].face_m / 2;
+  return (R / S.dist) * FOCAL;
+}
+
+function m2px(m) {
+  const R = DISTANCES[S.dist].face_m / 2;
+  return m * (apparentRadius() / R);
+}
+
+function drawTarget() {
+  const r = apparentRadius();
+  tCtx.clearRect(0, 0, SZ, SZ);
+  // No background fill — the green range gradient shows through
+
+  // Target backing (straw/foam)
+  tCtx.beginPath();
+  tCtx.arc(CX, CY, r * 1.14, 0, Math.PI * 2);
+  tCtx.fillStyle = '#8B7355';
+  tCtx.fill();
+
+  // Rings — outermost first
+  for (let i = RINGS.length - 1; i >= 0; i--) {
+    const [,fill, stroke, frac] = RINGS[i];
+    tCtx.beginPath();
+    tCtx.arc(CX, CY, r * frac, 0, Math.PI * 2);
+    tCtx.fillStyle = fill;
+    tCtx.fill();
+    tCtx.strokeStyle = stroke;
+    tCtx.lineWidth = 0.6;
+    tCtx.stroke();
+  }
+
+  // Cross lines on target face
+  tCtx.strokeStyle = 'rgba(0,0,0,0.2)';
+  tCtx.lineWidth = 0.5;
+  tCtx.beginPath();
+  tCtx.moveTo(CX - r, CY); tCtx.lineTo(CX + r, CY);
+  tCtx.moveTo(CX, CY - r); tCtx.lineTo(CX, CY + r);
+  tCtx.stroke();
+
+  // Arrow holes
+  for (const a of S.arrows) {
+    if (a.dist !== S.dist) continue;
+    const px = CX + m2px(a.x);
+    const py = CY - m2px(a.y);
+    // Shaft shadow
+    tCtx.beginPath();
+    tCtx.arc(px, py, 4.5, 0, Math.PI * 2);
+    tCtx.fillStyle = 'rgba(0,0,0,0.6)';
+    tCtx.fill();
+    // Nock
+    tCtx.beginPath();
+    tCtx.arc(px, py, 3.5, 0, Math.PI * 2);
+    tCtx.fillStyle = '#FF6B35';
+    tCtx.fill();
+    tCtx.strokeStyle = '#fff';
+    tCtx.lineWidth = 0.8;
+    tCtx.stroke();
+  }
+
+  // Predicted impact marker — deterministic hit (no scatter)
+  if (S.previewOn) {
+    const pred = computeHit(zeroLaunchElev(), zeroLaunchWind(), false);
+    const px = CX + m2px(pred.x);
+    const py = CY - m2px(pred.y);
+    tCtx.setLineDash([3, 3]);
+    tCtx.beginPath();
+    tCtx.arc(px, py, 7, 0, Math.PI * 2);
+    tCtx.strokeStyle = 'rgba(0,229,255,0.9)';
+    tCtx.lineWidth = 1.2;
+    tCtx.stroke();
+    tCtx.setLineDash([]);
+    tCtx.beginPath();
+    tCtx.arc(px, py, 1.5, 0, Math.PI * 2);
+    tCtx.fillStyle = 'rgba(0,229,255,0.9)';
+    tCtx.fill();
+  }
+}
+
+function drawPeep() {
+  pCtx.clearRect(0, 0, SZ, SZ);
+  const r = apparentRadius();
+
+  // Compute reticle center — represents raw aiming direction projected to target plane
+  const px_per_m = r / (DISTANCES[S.dist].face_m / 2);
+  const aim_x_m  =  Math.tan(S.windage * Math.PI / 180) * S.dist;
+  const aim_y_m  =  Math.tan(S.elev    * Math.PI / 180) * S.dist;
+  const rx = CX + aim_x_m * px_per_m;
+  const ry = CY - aim_y_m * px_per_m;  // canvas Y is inverted
+
+  if (!S.sightOn) {
+    // Instinctive / gap aiming — just a faint point of focus, no sight pin
+    pCtx.beginPath();
+    pCtx.arc(rx, ry, 2.2, 0, Math.PI * 2);
+    pCtx.fillStyle = 'rgba(220,240,220,0.6)';
+    pCtx.fill();
+    pCtx.beginPath();
+    pCtx.arc(rx, ry, 6, 0, Math.PI * 2);
+    pCtx.strokeStyle = 'rgba(220,240,220,0.2)';
+    pCtx.lineWidth = 1;
+    pCtx.stroke();
+    return;
+  }
+
+  // Scope aperture (aiming ring) — movable
+  const aR = Math.max(9, r * 0.09);
+  pCtx.beginPath();
+  pCtx.arc(rx, ry, aR, 0, Math.PI * 2);
+  pCtx.strokeStyle = 'rgba(0,220,100,0.9)';
+  pCtx.lineWidth = 1.5;
+  pCtx.stroke();
+
+  // Crosshair lines extending from aperture
+  const gap = aR * 1.15, ext = aR * 2.8;
+  pCtx.strokeStyle = 'rgba(0,220,100,0.55)';
+  pCtx.lineWidth = 0.8;
+  pCtx.beginPath();
+  pCtx.moveTo(rx - ext, ry); pCtx.lineTo(rx - gap, ry);
+  pCtx.moveTo(rx + gap, ry); pCtx.lineTo(rx + ext, ry);
+  pCtx.moveTo(rx, ry - ext); pCtx.lineTo(rx, ry - gap);
+  pCtx.moveTo(rx, ry + gap); pCtx.lineTo(rx, ry + ext);
+  pCtx.stroke();
+
+  // Center pin dot
+  pCtx.beginPath();
+  pCtx.arc(rx, ry, 1.5, 0, Math.PI * 2);
+  pCtx.fillStyle = 'rgba(0,220,100,1)';
+  pCtx.fill();
+}
+
+// ── Flight side view ──────────────────────────────────────────────────────────
+const fCvs = document.getElementById('flight-canvas');
+const fCtx = fCvs.getContext('2d');
+const LAUNCH_H = 1.5;   // launch / target-center height above ground (m)
+
+let flightAnim = null;  // in-flight shot: { shot, pts, p, start, dur }
+let lastFlight = null;  // most recent completed animated shot
+
+// Deterministic trajectory (no scatter) as [dist_m, height_above_ground_m] samples
+function previewPts(elev_deg) {
+  const v  = arrowMs(S.poundage), D = S.dist;
+  const th = elev_deg * Math.PI / 180;
+  const c2 = Math.cos(th) ** 2;
+  const N = 100, pts = [];
+  for (let i = 0; i <= N; i++) {
+    const x = D * i / N;
+    pts.push([x, LAUNCH_H + x * Math.tan(th) - G * x * x / (2 * v * v * c2)]);
+  }
+  return pts;
+}
+
+// Same arc, bent linearly so it terminates at the shot's actual hit height
+function shotPts(shot, elev_deg) {
+  const pts  = previewPts(elev_deg);
+  const corr = (LAUNCH_H + shot.y) - pts[pts.length - 1][1];
+  return pts.map(([x, y]) => [x, y + corr * x / shot.dist]);
+}
+
+function flightGeom() {
+  const W = fCvs.width, H = fCvs.height;
+  const L = 46, R = 26, T = 12, B = 20;
+  const faceR = DISTANCES[S.dist].face_m / 2;
+  let topM = Math.max(LAUNCH_H + faceR, 2.2);
+  const consider = pts => { for (const [, y] of pts) if (y > topM) topM = y; };
+  if (S.previewOn) consider(previewPts(zeroLaunchElev()));
+  if (flightAnim && flightAnim.shot.dist === S.dist) consider(flightAnim.pts);
+  if (lastFlight && lastFlight.shot.dist === S.dist) consider(lastFlight.pts);
+  topM *= 1.12;
+  const xs = (W - L - R) / S.dist;
+  const ys = (H - T - B) / topM;
+  return { W, H, fx: m => L + m * xs, fy: m => H - B - m * ys };
+}
+
+function tracePath(g, pts, upTo = 1) {
+  fCtx.beginPath();
+  const n = Math.max(2, Math.round(pts.length * upTo));
+  let started = false;
+  for (let i = 0; i < n; i++) {
+    const [x, y] = pts[i];
+    if (y < 0) break;   // arrow in the ground — stop drawing
+    started ? fCtx.lineTo(g.fx(x), g.fy(y)) : fCtx.moveTo(g.fx(x), g.fy(y));
+    started = true;
+  }
+  fCtx.stroke();
+}
+
+function pathPoint(pts, p) {
+  const f = Math.min(1, Math.max(0, p)) * (pts.length - 1);
+  const i = Math.min(pts.length - 2, Math.floor(f));
+  const u = f - i;
+  const [x0, y0] = pts[i], [x1, y1] = pts[i + 1];
+  return [x0 + (x1 - x0) * u, y0 + (y1 - y0) * u];
+}
+
+function drawFlight() {
+  if (!S.flightOn) return;
+  const w = fCvs.parentElement.clientWidth;
+  if (w && fCvs.width !== w) fCvs.width = w;
+  const g = flightGeom();
+  fCtx.clearRect(0, 0, g.W, g.H);
+
+  // Ground line
+  const gy = g.fy(0);
+  fCtx.strokeStyle = '#2d4a2d';
+  fCtx.lineWidth = 1.5;
+  fCtx.beginPath(); fCtx.moveTo(0, gy); fCtx.lineTo(g.W, gy); fCtx.stroke();
+
+  // Distance gridlines every 10 m
+  fCtx.font = '9px sans-serif';
+  fCtx.textAlign = 'center';
+  for (let m = 10; m < S.dist; m += 10) {
+    const x = g.fx(m);
+    fCtx.strokeStyle = 'rgba(48,54,61,0.5)';
+    fCtx.lineWidth = 0.5;
+    fCtx.beginPath(); fCtx.moveTo(x, 12); fCtx.lineTo(x, gy); fCtx.stroke();
+    fCtx.fillStyle = '#3a4450';
+    fCtx.fillText(m + '', x, gy + 12);
+  }
+  fCtx.fillStyle = '#6e7681';
+  fCtx.fillText('0 m', g.fx(0), gy + 12);
+  fCtx.fillText(S.dist + ' m', g.fx(S.dist), gy + 12);
+
+  // Archer
+  const ax = g.fx(0), ah = g.fy(LAUNCH_H);
+  fCtx.strokeStyle = '#8b949e';
+  fCtx.lineWidth = 1.5;
+  fCtx.beginPath(); fCtx.moveTo(ax, gy); fCtx.lineTo(ax, ah); fCtx.stroke();
+  fCtx.beginPath(); fCtx.arc(ax, ah - 6, 2.5, 0, Math.PI * 2);
+  fCtx.fillStyle = '#8b949e'; fCtx.fill();
+  fCtx.strokeStyle = '#c9a227';
+  fCtx.beginPath(); fCtx.arc(ax + 3, ah, 7, -Math.PI / 2.4, Math.PI / 2.4); fCtx.stroke();
+
+  // Target butt: legs, backing, face band, gold center
+  const tx = g.fx(S.dist);
+  const faceR = DISTANCES[S.dist].face_m / 2;
+  const fTop = g.fy(LAUNCH_H + faceR), fBot = g.fy(LAUNCH_H - faceR);
+  fCtx.strokeStyle = '#6e7681';
+  fCtx.lineWidth = 1;
+  fCtx.beginPath();
+  fCtx.moveTo(tx - 5, gy); fCtx.lineTo(tx, fBot);
+  fCtx.moveTo(tx + 5, gy); fCtx.lineTo(tx, fBot);
+  fCtx.stroke();
+  fCtx.strokeStyle = '#8B7355';
+  fCtx.lineWidth = 6;
+  fCtx.beginPath(); fCtx.moveTo(tx, fTop - 4); fCtx.lineTo(tx, fBot + 4); fCtx.stroke();
+  fCtx.strokeStyle = '#FFD700';
+  const goldR = faceR * 0.16;
+  fCtx.beginPath();
+  fCtx.moveTo(tx, g.fy(LAUNCH_H + goldR)); fCtx.lineTo(tx, g.fy(LAUNCH_H - goldR));
+  fCtx.stroke();
+
+  // Wind sock at mid-range when wind is active
+  if (S.windOn && S.wind.mph > 0) {
+    const sx = g.fx(S.dist * 0.5);
+    const st = g.fy(2.0);   // pole top, 2 m
+    fCtx.strokeStyle = '#6e7681';
+    fCtx.lineWidth = 1;
+    fCtx.beginPath(); fCtx.moveTo(sx, gy); fCtx.lineTo(sx, st); fCtx.stroke();
+
+    const frac = Math.min(1, S.wind.mph / 15);           // 0..1 wind strength
+    const fore = Math.cos(S.wind.dir * Math.PI / 180);   // + = tailwind (toward target)
+    const sgn  = fore >= 0 ? 1 : -1;
+    const len  = (10 + 16 * frac) * Math.max(0.3, Math.abs(fore)); // crosswind foreshortens
+    const droop = (1 - frac) * 1.2;                      // rad below horizontal; 0 = stiff
+
+    fCtx.save();
+    fCtx.translate(sx, st);
+    fCtx.scale(sgn, 1);     // flip toward archer for headwinds
+    fCtx.rotate(droop);
+    const sockCols = ['#ff7b1f', '#f0f0f0', '#ff7b1f'];
+    for (let i = 0; i < 3; i++) {
+      const x0 = len * i / 3,        x1 = len * (i + 1) / 3;
+      const w0 = 5 - i,              w1 = 5 - (i + 1);   // taper 5px → 2px
+      fCtx.beginPath();
+      fCtx.moveTo(x0, -w0 / 2); fCtx.lineTo(x1, -w1 / 2);
+      fCtx.lineTo(x1,  w1 / 2); fCtx.lineTo(x0,  w0 / 2);
+      fCtx.closePath();
+      fCtx.fillStyle = sockCols[i];
+      fCtx.fill();
+    }
+    fCtx.restore();
+  }
+
+  // Path preview — dashed arc for current settings
+  if (S.previewOn) {
+    fCtx.strokeStyle = 'rgba(0,220,100,0.55)';
+    fCtx.lineWidth = 1;
+    fCtx.setLineDash([5, 4]);
+    tracePath(g, previewPts(zeroLaunchElev()));
+    fCtx.setLineDash([]);
+  }
+
+  // Last completed shot — always shown, independent of the preview toggle
+  if (lastFlight && lastFlight.shot.dist === S.dist && !flightAnim) {
+    fCtx.strokeStyle = 'rgba(255,107,53,0.6)';
+    fCtx.lineWidth = 1.2;
+    tracePath(g, lastFlight.pts);
+  }
+
+  // In-flight animation: trace so far + arrow glyph
+  if (flightAnim) {
+    fCtx.strokeStyle = 'rgba(255,107,53,0.85)';
+    fCtx.lineWidth = 1.2;
+    tracePath(g, flightAnim.pts, flightAnim.p);
+
+    const p2 = Math.min(1, flightAnim.p + 0.01);
+    const [bx, by] = pathPoint(flightAnim.pts, p2);
+    const [mx, my] = pathPoint(flightAnim.pts, p2 - 0.01);
+    if (my >= 0) {
+      const px = g.fx(mx), py = g.fy(my);
+      const ang = Math.atan2(g.fy(by) - py, g.fx(bx) - px);
+      fCtx.save();
+      fCtx.translate(px, py);
+      fCtx.rotate(ang);
+      fCtx.strokeStyle = '#e6edf3';
+      fCtx.lineWidth = 1.5;
+      fCtx.beginPath(); fCtx.moveTo(-7, 0); fCtx.lineTo(4, 0); fCtx.stroke();
+      fCtx.fillStyle = '#FF6B35';
+      fCtx.beginPath();
+      fCtx.moveTo(5, 0); fCtx.lineTo(1, -2); fCtx.lineTo(1, 2);
+      fCtx.closePath(); fCtx.fill();
+      fCtx.strokeStyle = '#FF6B35';
+      fCtx.beginPath();
+      fCtx.moveTo(-7, 0); fCtx.lineTo(-9, -2.5);
+      fCtx.moveTo(-7, 0); fCtx.lineTo(-9, 2.5);
+      fCtx.stroke();
+      fCtx.restore();
+    }
+  }
+}
+
+function startFlightAnim(shot) {
+  if (flightAnim) commitShot(flightAnim.shot);   // shot again mid-flight: land previous instantly
+  flightAnim = {
+    shot,
+    pts: shotPts(shot, shot.launchE),
+    p: 0,
+    start: performance.now(),
+    dur: 400 + shot.t * 800,   // ms — slowed real flight time for visibility
+  };
+  requestAnimationFrame(stepFlight);
+}
+
+function stepFlight(now) {
+  if (!flightAnim) return;
+  flightAnim.p = Math.min(1, (now - flightAnim.start) / flightAnim.dur);
+  drawFlight();
+  if (flightAnim.p >= 1) {
+    const done = flightAnim;
+    flightAnim = null;
+    lastFlight = done;
+    commitShot(done.shot);
+  } else {
+    requestAnimationFrame(stepFlight);
+  }
+}
+
+function render() { drawTarget(); drawPeep(); if (!flightAnim) drawFlight(); }
+
+// ── UI Updates ────────────────────────────────────────────────────────────────
+function refreshStats() {
+  const v  = arrowMs(S.poundage);
+  const D  = S.dist;
+  const t0 = D / v;
+  const drop = 0.5 * G * t0 * t0;
+  const zero = zeroElevDeg();
+
+  document.getElementById('v-poundage').textContent = S.poundage + ' lb';
+  document.getElementById('v-mass').textContent     = arrowGrains(S.poundage) + ' gr';
+  document.getElementById('v-speed').textContent    = Math.round(arrowFps(S.poundage)) + ' fps';
+  document.getElementById('v-spine').textContent    = optSpine(S.poundage);
+  document.getElementById('v-zero').textContent     = Math.round(zero / TICK_DEG) + ' ↓';
+  document.getElementById('s-fps').textContent      = Math.round(arrowFps(S.poundage)) + ' fps';
+  document.getElementById('s-time').textContent     = t0.toFixed(2) + 's';
+  document.getElementById('s-drop').textContent     = (drop * 100).toFixed(1) + ' cm';
+
+  const face = (DISTANCES[S.dist].face_m * 100).toFixed(0);
+  document.getElementById('distance-label').textContent = `${D} m  —  ${face} cm target face`;
+}
+
+function refreshScores() {
+  const n = S.arrows.length;
+  document.getElementById('s-count').textContent = n;
+  document.getElementById('s-total').textContent = S.total;
+  document.getElementById('s-avg').textContent   = n ? (S.total / n).toFixed(1) : '—';
+}
+
+// ── Wind ──────────────────────────────────────────────────────────────────────
+const DIR_ARROWS = ['N','NE','E','SE','S','SW','W','NW'];
+function windDirLabel(deg) {
+  return DIR_ARROWS[Math.round(((deg % 360) + 360) % 360 / 45) % 8];
+}
+
+function newWind() {
+  S.wind.mph = +(Math.random() * 15).toFixed(1);
+  S.wind.dir = Math.round(Math.random() * 360);
+  updateWindUI();
+}
+
+function updateWindUI() {
+  const show = S.windOn;
+  document.getElementById('wind-details').style.display = show ? 'block' : 'none';
+  const banner = document.getElementById('wind-banner');
+  if (show && S.wind.mph > 0) {
+    const txt = `${S.wind.mph} mph ${windDirLabel(S.wind.dir)}`;
+    document.getElementById('v-wind-info').textContent = txt;
+    banner.textContent = txt + ' wind';
+    banner.style.display = 'block';
+  } else {
+    banner.style.display = 'none';
+  }
+  if (!flightAnim) drawFlight();   // wind sock reflects current wind
+}
+
+// ── Shoot ─────────────────────────────────────────────────────────────────────
+const SCORE_COLORS = {
+  'X': '#FFD700', 10: '#FFD700', 9: '#c9d1d9', 8: '#ff7b72',
+  7: '#ff7b72', 6: '#79c0ff', 5: '#79c0ff', 4: '#8b949e',
+  3: '#8b949e', 2: '#8b949e', 1: '#8b949e', 'M': '#f85149',
+};
+
+function shoot() {
+  const le = launchElev(), lw = launchWind();
+  const hit   = computeHit(le, lw);
+  const score = getScore(hit.x, hit.y);
+  const shot  = { x: hit.x, y: hit.y, dist: S.dist, score, t: hit.t, launchE: le };
+  if (S.flightOn) {
+    startFlightAnim(shot);   // score commits when the arrow lands
+  } else {
+    lastFlight = null;
+    commitShot(shot);
+  }
+}
+
+function commitShot(shot) {
+  S.arrows.push({ x: shot.x, y: shot.y, dist: shot.dist, score: shot.score });
+  S.total += scoreNum(shot.score);
+  startLowering();   // arrow has reached the target — lower the bow to re-aim
+  document.getElementById('s-last').textContent = shot.score;
+  refreshScores();
+  render();
+  showPopup(shot.score);
+}
+
+function showPopup(score) {
+  const el = document.getElementById('score-popup');
+  el.textContent = score === 'M' ? 'MISS' : score;
+  el.style.color = SCORE_COLORS[score] || '#fff';
+  el.classList.remove('show');
+  void el.offsetWidth;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), 1100);
+}
+
+// ── Aiming ────────────────────────────────────────────────────────────────────
+// Arrow keys always move the aim cursor. With droop & sway enabled, elevation
+// drops continuously (more with heavier bows) and windage wanders randomly.
+const AIM = {
+  droopBase:  0.05,   // °/s elevation drop, floor
+  droopPerLb: 0.002,  // °/s extra per lb of draw weight
+  elevRate:   0.9,    // °/s correction while ↑/↓ held
+  windRate:   0.7,    // °/s correction while ←/→ held
+  swayAccel:  0.9,    // °/s² random kick to sway velocity
+  swayDamp:   0.5,    // 1/s sway velocity damping
+  swayMax:    0.3,    // °/s sway velocity cap
+  lowerRate:  4,      // °/s bow-lowering speed after a shot lands
+  followThru: 0.7,    // s — hold the aim after the hit before lowering (follow-through)
+};
+
+const keys = {};
+let swayV = 0;
+let aimT  = performance.now();
+let lowering = null;   // { e0, w0, e1, w1, t, dur } while the bow is coming down
+
+function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+
+// Instant aim reset to the bottom edge — used at init and on distance change.
+function resetAim() {
+  const lim = aimLimDeg();
+  S.elev    = -lim;
+  S.windage = clamp((Math.random() - 0.5) * 0.8, -lim, lim);
+  swayV = 0;
+  lowering = null;
+}
+
+// After a shot lands the bow holds steady for a beat (follow-through), then
+// comes down: glide the cursor to the bottom edge, slightly off-line, so each
+// arrow must be raised and re-aimed from scratch.
+function startLowering() {
+  const lim = aimLimDeg();
+  const e1  = -lim;
+  const w1  = clamp((Math.random() - 0.5) * 0.8, -lim, lim);
+  lowering  = {
+    e0: S.elev, w0: S.windage, e1, w1,
+    delay: AIM.followThru,
+    t: 0, dur: Math.max(0.25, (S.elev - e1) / AIM.lowerRate),
+  };
+  swayV = 0;
+}
+
+function aimLoop(now) {
+  const dt = Math.min(0.05, (now - aimT) / 1000);
+  aimT = now;
+  const lim = aimLimDeg();
+
+  const keyHeld = keys.ArrowUp || keys.ArrowDown || keys.ArrowLeft || keys.ArrowRight;
+  if (lowering && keyHeld) lowering = null;   // archer takes over mid-lowering
+
+  if (lowering && lowering.delay > 0) {
+    lowering.delay -= dt;   // follow-through: hold the aim before lowering
+  } else if (lowering) {
+    lowering.t += dt;
+    const u = Math.min(1, lowering.t / lowering.dur);
+    const p = 1 - (1 - u) * (1 - u);   // ease out — decelerates near the bottom
+    S.elev    = lowering.e0 + (lowering.e1 - lowering.e0) * p;
+    S.windage = lowering.w0 + (lowering.w1 - lowering.w0) * p;
+    if (u >= 1) lowering = null;
+  } else {
+    let dE = 0, dW = 0;
+    if (keys.ArrowUp)    dE += AIM.elevRate;
+    if (keys.ArrowDown)  dE -= AIM.elevRate;
+    if (keys.ArrowLeft)  dW -= AIM.windRate;
+    if (keys.ArrowRight) dW += AIM.windRate;
+
+    if (S.dynamicOn) {
+      dE -= AIM.droopBase + S.poundage * AIM.droopPerLb;   // constant elevation droop
+      swayV += (Math.random() - 0.5) * 2 * AIM.swayAccel * dt;   // damped random sway
+      swayV -= swayV * AIM.swayDamp * dt;
+      swayV  = clamp(swayV, -AIM.swayMax, AIM.swayMax);
+      dW += swayV;
+    }
+
+    S.elev    = clamp(S.elev    + dE * dt, -lim, lim);
+    S.windage = clamp(S.windage + dW * dt, -lim, lim);
+  }
+  render();
+  requestAnimationFrame(aimLoop);
+}
+
+function setDynamic(on) {
+  S.dynamicOn = on;
+  if (on) { swayV = 0; aimT = performance.now(); }
+}
+
+document.addEventListener('keydown', e => {
+  const tag = e.target.tagName;
+  if (e.code === 'Space') {
+    if (tag === 'SELECT') return;
+    e.preventDefault();
+    if (!e.repeat) shoot();
+    return;
+  }
+  if (tag === 'SELECT' || tag === 'INPUT') return;   // sliders/selects keep arrow keys
+  if (e.code in { ArrowUp: 1, ArrowDown: 1, ArrowLeft: 1, ArrowRight: 1 }) {
+    keys[e.code] = true;
+    e.preventDefault();
+  }
+});
+
+document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+// ── Event Listeners ───────────────────────────────────────────────────────────
+document.getElementById('dist-select').addEventListener('change', e => {
+  S.dist = +e.target.value;
+  lastFlight = null;
+  resetAim();
+  refreshStats(); render();
+});
+
+document.getElementById('poundage').addEventListener('input', e => {
+  S.poundage = +e.target.value;
+  refreshStats(); render();
+});
+
+function fmtTicks(t, neg, pos) {
+  return t === 0 ? '0' : Math.abs(t) + ' ' + (t < 0 ? neg : pos);
+}
+
+function syncSightUI() {
+  document.getElementById('v-sight-elev').textContent = fmtTicks(S.sightElev, '↓', '↑');
+  document.getElementById('v-sight-wind').textContent = fmtTicks(S.sightWind, '←', '→');
+  document.getElementById('sight-elev').disabled = !S.sightOn;
+  document.getElementById('sight-wind').disabled = !S.sightOn;
+}
+
+document.getElementById('sight-elev').addEventListener('input', e => {
+  S.sightElev = +e.target.value;
+  syncSightUI();
+});
+
+document.getElementById('sight-wind').addEventListener('input', e => {
+  S.sightWind = +e.target.value;
+  syncSightUI();
+});
+
+document.getElementById('sight-toggle').addEventListener('change', e => {
+  S.sightOn = e.target.checked;
+  syncSightUI();
+});
+
+document.querySelectorAll('.spine-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.spine-btn').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    S.spineErr = +b.dataset.v;
+    document.getElementById('spine-desc').textContent = SPINE_LABELS[b.dataset.v];
+  });
+});
+
+document.getElementById('wind-toggle').addEventListener('change', e => {
+  S.windOn = e.target.checked;
+  if (S.windOn && S.wind.mph === 0) newWind();
+  updateWindUI();
+});
+
+document.getElementById('new-wind-btn').addEventListener('click', newWind);
+document.getElementById('shoot-btn').addEventListener('click', shoot);
+
+document.getElementById('reset-btn').addEventListener('click', () => {
+  S.arrows = []; S.total = 0;
+  lastFlight = null;
+  document.getElementById('s-last').textContent = '—';
+  refreshScores(); render();
+});
+
+document.getElementById('flight-toggle').addEventListener('change', e => {
+  S.flightOn = e.target.checked;
+  document.getElementById('flight-panel').classList.toggle('on', S.flightOn);
+  if (S.flightOn) drawFlight();
+});
+
+document.getElementById('preview-toggle').addEventListener('change', e => {
+  S.previewOn = e.target.checked;
+  render();
+});
+
+document.getElementById('dynamic-toggle').addEventListener('change', e => {
+  setDynamic(e.target.checked);
+});
+
+window.addEventListener('resize', () => { if (!flightAnim) drawFlight(); });
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+refreshStats();
+setDynamic(S.dynamicOn);
+syncSightUI();
+resetAim();
+render();
+requestAnimationFrame(aimLoop);
+</script>
+</body>
+</html>
