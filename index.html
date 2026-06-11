@@ -104,7 +104,7 @@ select:focus { outline: 1px solid #58a6ff; }
 input[type="checkbox"] { accent-color: #58a6ff; cursor: pointer; }
 #wind-details { font-size: 0.72rem; color: #8b949e; }
 #wind-details span { color: #ffa657; font-weight: 600; }
-#new-wind-btn {
+#new-wind-btn, #tilt-center-btn {
   font-size: 0.68rem;
   padding: 2px 6px;
   background: #21262d;
@@ -113,7 +113,7 @@ input[type="checkbox"] { accent-color: #58a6ff; cursor: pointer; }
   border-radius: 3px;
   cursor: pointer;
 }
-#new-wind-btn:hover { color: #c9d1d9; }
+#new-wind-btn:hover, #tilt-center-btn:hover { color: #c9d1d9; }
 .shoot-btn {
   width: 100%;
   padding: 11px;
@@ -177,11 +177,15 @@ input[type="checkbox"] { accent-color: #58a6ff; cursor: pointer; }
 #canvas-wrap {
   position: relative;
   display: inline-block;
+  touch-action: none;   /* drag on the target aims instead of scrolling */
+  user-select: none;
+  -webkit-user-select: none;
 }
 #target-canvas, #peep-canvas {
   display: block;
-  width: 500px;
-  height: 500px;
+  width: min(500px, 94vw);
+  height: auto;
+  aspect-ratio: 1;
 }
 #peep-canvas {
   position: absolute;
@@ -234,6 +238,20 @@ input[type="checkbox"] { accent-color: #58a6ff; cursor: pointer; }
 }
 #flight-panel.on { display: block; }
 #flight-canvas { display: block; width: 100%; height: 150px; }
+@media (max-width: 700px) {
+  main { flex-direction: column-reverse; overflow-y: auto; }
+  #controls {
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    border-right: none;
+    border-top: 1px solid #30363d;
+    overflow-y: visible;
+  }
+  .cg { flex: 1 1 46%; }
+  .shoot-btn, .reset-btn { flex: 1 1 100%; }
+  #target-area { flex-shrink: 0; min-height: 70vh; padding: 28px 0 100px; }
+}
 </style>
 </head>
 <body>
@@ -303,6 +321,16 @@ input[type="checkbox"] { accent-color: #58a6ff; cursor: pointer; }
         <b style="color:#58a6ff">&#8593;&#8595;</b> raise / lower bow<br>
         <b style="color:#58a6ff">&#8592;&#8594;</b> swing left / right<br>
         <b style="color:#58a6ff">Space</b> — shoot
+      </div>
+      <div class="wind-row" id="tilt-row" style="display:none">
+        <input type="checkbox" id="tilt-toggle">
+        <label for="tilt-toggle" style="font-size:0.82rem;cursor:pointer">Tilt aiming</label>
+        <button id="tilt-center-btn">Center</button>
+      </div>
+      <div id="touch-hint" style="display:none;font-size:0.68rem;color:#8b949e;line-height:1.5">
+        <b style="color:#58a6ff">Drag</b> on target — aim<br>
+        <b style="color:#58a6ff">Tap</b> target — shoot<br>
+        <b style="color:#58a6ff">Tilt</b> device — aim like a bow
       </div>
     </div>
     <div class="cg">
@@ -1006,8 +1034,9 @@ function aimLoop(now) {
   aimT = now;
   const lim = aimLimDeg();
 
-  const keyHeld = keys.ArrowUp || keys.ArrowDown || keys.ArrowLeft || keys.ArrowRight;
-  if (lowering && keyHeld) lowering = null;   // archer takes over mid-lowering
+  const keyHeld  = keys.ArrowUp || keys.ArrowDown || keys.ArrowLeft || keys.ArrowRight;
+  const tiltHeld = tilt.active && (Math.abs(tilt.pitch) > 5 || Math.abs(tilt.roll) > 5);
+  if (lowering && (keyHeld || tiltHeld)) lowering = null;   // archer takes over mid-lowering
 
   if (lowering && lowering.delay > 0) {
     lowering.delay -= dt;   // follow-through: hold the aim before lowering
@@ -1024,6 +1053,10 @@ function aimLoop(now) {
     if (keys.ArrowDown)  dE -= AIM.elevRate;
     if (keys.ArrowLeft)  dW -= AIM.windRate;
     if (keys.ArrowRight) dW += AIM.windRate;
+    if (tilt.active) {
+      dE += tiltRate(tilt.pitch);
+      dW += tiltRate(tilt.roll);
+    }
 
     if (S.dynamicOn) {
       dE -= AIM.droopBase + S.poundage * AIM.droopPerLb;   // constant elevation droop
@@ -1061,6 +1094,93 @@ document.addEventListener('keydown', e => {
 });
 
 document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+// ── Tilt aiming (tablets / phones) ────────────────────────────────────────────
+// The device acts like the bow: deviation from the calibrated neutral hold
+// steers the aim at a proportional rate (joystick-style), so droop & sway and
+// the post-shot lowering keep working exactly as with the arrow keys.
+const tilt = { active: false, neutral: null, pitch: 0, roll: 0 };
+const IS_TOUCH = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
+function onTilt(e) {
+  if (e.beta == null || e.gamma == null) return;
+  // Remap device axes to screen pitch/roll for the current orientation
+  const angle = (((screen.orientation && screen.orientation.angle) ?? window.orientation ?? 0) + 360) % 360;
+  let pitch, roll;
+  switch (angle) {
+    case 90:  pitch =  e.gamma; roll = -e.beta;  break;
+    case 180: pitch = -e.beta;  roll = -e.gamma; break;
+    case 270: pitch = -e.gamma; roll =  e.beta;  break;
+    default:  pitch =  e.beta;  roll =  e.gamma;
+  }
+  if (!tilt.neutral) tilt.neutral = { pitch, roll };   // first reading = neutral hold
+  tilt.pitch = pitch - tilt.neutral.pitch;
+  tilt.roll  = roll  - tilt.neutral.roll;
+}
+
+// Tilt (°) past a small dead zone → aim rate (°/s), capped
+function tiltRate(d) {
+  const dead = 1.5, span = 14, max = 2.2;
+  const a = Math.abs(d) - dead;
+  if (a <= 0) return 0;
+  return Math.sign(d) * Math.min(1, a / span) * max;
+}
+
+async function setTilt(on) {
+  if (!on) {
+    window.removeEventListener('deviceorientation', onTilt);
+    tilt.active = false;
+    return;
+  }
+  // iOS 13+ requires an explicit permission request from a user gesture
+  if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+    try {
+      if (await DeviceOrientationEvent.requestPermission() !== 'granted') {
+        document.getElementById('tilt-toggle').checked = false;
+        return;
+      }
+    } catch {
+      document.getElementById('tilt-toggle').checked = false;
+      return;
+    }
+  }
+  tilt.neutral = null;
+  tilt.pitch = tilt.roll = 0;
+  window.addEventListener('deviceorientation', onTilt);
+  tilt.active = true;
+}
+
+// ── Pointer aiming: drag on the target to aim, tap to shoot ──────────────────
+const wrap = document.getElementById('canvas-wrap');
+let drag = null;
+
+wrap.addEventListener('pointerdown', e => {
+  drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: 0 };
+  wrap.setPointerCapture(e.pointerId);
+});
+
+wrap.addEventListener('pointermove', e => {
+  if (!drag || e.pointerId !== drag.id) return;
+  const rect = tCvs.getBoundingClientRect();
+  // 1:1 — the reticle follows the finger/cursor exactly
+  const degPerPx = Math.atan2(1, FOCAL) * 180 / Math.PI * (SZ / rect.width);
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+  drag.x = e.clientX; drag.y = e.clientY;
+  drag.moved += Math.abs(dx) + Math.abs(dy);
+  if (drag.moved > 6) lowering = null;   // archer takes over mid-lowering
+  const lim = aimLimDeg();
+  S.windage = clamp(S.windage + dx * degPerPx, -lim, lim);
+  S.elev    = clamp(S.elev    - dy * degPerPx, -lim, lim);
+});
+
+wrap.addEventListener('pointerup', e => {
+  if (!drag || e.pointerId !== drag.id) return;
+  const tap = drag.moved <= 6;
+  drag = null;
+  if (tap) shoot();
+});
+
+wrap.addEventListener('pointercancel', () => { drag = null; });
 
 // ── Event Listeners ───────────────────────────────────────────────────────────
 document.getElementById('dist-select').addEventListener('change', e => {
@@ -1140,6 +1260,15 @@ document.getElementById('preview-toggle').addEventListener('change', e => {
 document.getElementById('dynamic-toggle').addEventListener('change', e => {
   setDynamic(e.target.checked);
 });
+
+document.getElementById('tilt-toggle').addEventListener('change', e => setTilt(e.target.checked));
+document.getElementById('tilt-center-btn').addEventListener('click', () => { tilt.neutral = null; });
+
+if (IS_TOUCH) {
+  document.getElementById('touch-hint').style.display = 'block';
+  document.getElementById('dyn-hint').style.display = 'none';
+  if (window.DeviceOrientationEvent) document.getElementById('tilt-row').style.display = 'flex';
+}
 
 window.addEventListener('resize', () => { if (!flightAnim) drawFlight(); });
 
