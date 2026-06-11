@@ -12,9 +12,9 @@ Browser-based target archery simulator. Single-file, no build step — open `ind
 2. Select a **distance** from the dropdown (10 m – 70 m).
 3. Set **bow poundage** — arrow mass and speed are auto-calculated and displayed.
 4. Choose **arrow spine** offset (−2 to +2). Spine 0 = optimal for your poundage.
-5. Set the **sight** (tick-based, like a real sight): the elevation/windage sliders move the sight pin in 0.05° clicks. Moving the sight **down** forces you to raise the bow to re-center the pin, so the arrow hits **higher** — use the **Ref:** value as the starting elevation setting. Uncheck **Use sight** to shoot instinctive/gap style (no pin, no offsets — just a faint focus dot).
+5. Set the **sight** in the dialog that opens at launch and on every distance change (reopen it anytime with **Adjust Sight** in the sidebar). The elevation/windage sliders move the sight pin in 0.05° clicks; moving the sight **down** forces you to raise the bow to re-center the pin, so the arrow hits **higher** — use the **Ref:** value as the starting elevation, then dial until the cyan marker sits in the gold. Press **Start** to close the dialog and begin shooting — no arrow can be loosed while it is open. Settings are **saved per distance** in `localStorage`, so they survive reloads. Uncheck **Use sight** to shoot instinctive/gap style (no pin, no offsets — just a faint focus dot).
 6. Aim with the **arrow keys** — the cursor starts at the bottom of the view each time, so you raise the bow onto the target for every arrow. With **Bow droop & sway** on (the default), elevation constantly droops and windage sways randomly, so you must actively hold the position. Press **Space** to shoot. You can also **drag** on the target with the mouse to aim and **click** it to shoot.
-7. On a **tablet or phone**: **drag** anywhere on the range to aim, **tap** it to shoot. On devices with motion sensors, **tilt aiming starts enabled** (on iOS the motion-permission prompt appears at your first tap) and can be toggled with the **Tilt aiming** checkbox in the Aiming section. The pose you hold the device in when tilt engages becomes the center of the aim range for the session: **raise/lower the device ±15°** to sweep the aim, **roll** it left/right for windage. After every shot the bow is released — **dip the device ~10–15° down** to take it in hand for the next arrow, then raise it back onto the target, like re-raising a real bow. Raising back to the same pose returns the aim to the same spot. Toggle the checkbox off/on to re-center on a new pose. While tilt-aiming, a thumb-drag on the target fine-tunes the aim (handy for left/right corrections). Motion sensors require HTTPS, so tilt works on the hosted site but not from a local `file://` open on iOS.
+7. On a **tablet or phone**: **drag** anywhere on the range to aim, **tap** it to shoot. On devices with motion sensors, **tilt aiming starts enabled** — the sight dialog's **Start** button doubles as the user gesture for the iOS motion-permission prompt — and can be toggled with the **Tilt aiming** checkbox in the Aiming section. The pose you hold the device in when tilt engages becomes the center of the aim range for the session: **raise/lower the device ±15°** to sweep the aim, **roll** it left/right for windage. After every shot the bow is released — **dip the device ~10–15° down** to take it in hand for the next arrow, then raise it back onto the target, like re-raising a real bow. Raising back to the same pose returns the aim to the same spot. Toggle the checkbox off/on to re-center on a new pose. While tilt-aiming, a thumb-drag on the target fine-tunes the aim (handy for left/right corrections). Motion sensors require HTTPS, so tilt works on the hosted site but not from a local `file://` open on iOS.
 8. Optionally enable **wind** — a random wind is generated; click "New" to reroll it.
 9. Press **SHOOT** (or **Space**). The arrow lands according to physics + scatter. Score appears as a popup and is added to the running total.
 10. **Clear Arrows** resets the group while keeping settings.
@@ -226,7 +226,7 @@ Pointer events on `#target-area` (the whole range, not just the canvas, so taps 
 
 #### Tilt aiming (tablets / phones)
 
-On touch devices that expose `DeviceOrientationEvent`, a **Tilt aiming** checkbox appears and **starts enabled**: platforms without a permission gate (Android) enable it at load, while iOS 13+ requires `DeviceOrientationEvent.requestPermission()` to be called from a user gesture, so there it arms on the first touch anywhere in the page (denying the permission unchecks the box).
+On touch devices that expose `DeviceOrientationEvent`, a **Tilt aiming** checkbox appears and **starts enabled**: iOS 13+ requires `DeviceOrientationEvent.requestPermission()` to be called from a user gesture, so tilt arms when the sight dialog's **Start** button is pressed (denying the permission unchecks the box, and unchecking it yourself stops it from re-arming on later dialogs).
 
 Tilt has a grab/release cycle that mirrors the real shot cycle, **anchored to however the user holds the device** (no assumption of an upright or flat hold):
 
@@ -243,6 +243,12 @@ Sensor events require a secure context (HTTPS), so tilt works on the GitHub Page
 #### Responsive layout
 
 The target canvases scale down via `width: min(500px, 94vw)` (drawing stays at 500 × 500 internal pixels; pointer math compensates by the CSS scale). Below 700 px viewport width the layout stacks — target on top, controls in a wrap-row below.
+
+#### Sight dialog & persistence
+
+The sight elevation/windage sliders live in a modal dialog (`#sight-modal`) that opens at load and on every distance change, so the sight can be dialed in before any arrow flies — `shoot()` is guarded while it is open, blocking Space, taps, and the SHOOT button. The dialog sits at the bottom of the screen with the target visible behind it, so the cyan zero-marker can be watched while adjusting. **Adjust Sight** in the sidebar reopens it; the sidebar keeps a read-only summary of the current setting.
+
+Sight settings persist in `localStorage` under `archery-sight-v1`, keyed **per distance** (`{ "18": { e, w }, ... }` plus the use-sight flag) since elevation is distance-dependent. They are saved on every slider change and reapplied at load and on distance switches, so each distance only ever needs to be sighted in once.
 
 ### State object
 

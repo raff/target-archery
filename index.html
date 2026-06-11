@@ -253,6 +253,36 @@ input[type="checkbox"] { accent-color: #58a6ff; cursor: pointer; }
 }
 #flight-panel.on { display: block; }
 #flight-canvas { display: block; width: 100%; height: 150px; }
+.reset-btn:disabled { opacity: 0.45; cursor: default; }
+#sight-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(4,8,12,0.45);
+  z-index: 100;
+  display: none;
+}
+#sight-dialog {
+  position: absolute;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%);
+  width: min(400px, 92vw);
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+}
+#sight-dialog h2 {
+  font-size: 0.8rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #58a6ff;
+}
+#sight-modal-note { font-size: 0.72rem; color: #8b949e; line-height: 1.5; }
 @media (max-width: 700px) {
   main { flex-direction: column-reverse; overflow-y: auto; }
   #controls {
@@ -310,20 +340,8 @@ input[type="checkbox"] { accent-color: #58a6ff; cursor: pointer; }
         <input type="checkbox" id="sight-toggle" checked>
         <label for="sight-toggle" style="font-size:0.82rem;cursor:pointer">Use sight</label>
       </div>
-      <div class="clabel"><span>Elevation</span><span class="val" id="v-sight-elev">0</span></div>
-      <input type="range" id="sight-elev" min="-250" max="50" value="0" step="1">
-      <div class="range-hint">
-        <span>250&#8595;</span>
-        <span>Ref: <span class="ref" id="v-zero">—</span></span>
-        <span>50&#8593;</span>
-      </div>
-      <div class="clabel"><span>Windage</span><span class="val" id="v-sight-wind">0</span></div>
-      <input type="range" id="sight-wind" min="-60" max="60" value="0" step="1">
-      <div class="range-hint">
-        <span>60&#8592;</span>
-        <span>ticks</span>
-        <span>60&#8594;</span>
-      </div>
+      <div class="info-row"><span>Setting</span><span id="v-sight-summary">0 / 0</span></div>
+      <button id="sight-open-btn" class="reset-btn">Adjust Sight</button>
       <div id="sight-desc" style="font-size:0.68rem;color:#8b949e">Sight &#8595; &#8594; arrow hits &#8593;</div>
     </div>
     <div class="cg">
@@ -396,6 +414,27 @@ input[type="checkbox"] { accent-color: #58a6ff; cursor: pointer; }
 </main>
 <div id="flight-panel" class="on">
   <canvas id="flight-canvas" width="800" height="150"></canvas>
+</div>
+<div id="sight-modal">
+  <div id="sight-dialog">
+    <h2 id="sight-modal-title">Sight — 18 m</h2>
+    <div class="clabel"><span>Elevation</span><span class="val" id="v-sight-elev">0</span></div>
+    <input type="range" id="sight-elev" min="-250" max="50" value="0" step="1">
+    <div class="range-hint">
+      <span>250&#8595;</span>
+      <span>Ref: <span class="ref" id="v-zero">—</span></span>
+      <span>50&#8593;</span>
+    </div>
+    <div class="clabel"><span>Windage</span><span class="val" id="v-sight-wind">0</span></div>
+    <input type="range" id="sight-wind" min="-60" max="60" value="0" step="1">
+    <div class="range-hint">
+      <span>60&#8592;</span>
+      <span>ticks</span>
+      <span>60&#8594;</span>
+    </div>
+    <div id="sight-modal-note">Set elevation near the <b style="color:#3fb950">Ref</b> value, then dial until the <b style="color:#00e5ff">cyan marker</b> on the target sits in the gold. Settings are saved per distance.</div>
+    <button id="sight-start-btn" class="shoot-btn">Start</button>
+  </div>
 </div>
 <script>
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -969,6 +1008,7 @@ const SCORE_COLORS = {
 };
 
 function shoot() {
+  if (sightModalOpen()) return;   // no stray arrows while adjusting the sight
   const le = launchElev(), lw = launchWind();
   const hit   = computeHit(le, lw);
   const score = getScore(hit.x, hit.y);
@@ -1280,12 +1320,69 @@ aimArea.addEventListener('pointerup', e => {
 
 aimArea.addEventListener('pointercancel', () => { drag = null; });
 
+// ── Sight dialog & persistence ────────────────────────────────────────────────
+// Each distance remembers its own sight setting (elevation is distance-
+// dependent). The dialog opens at load and on distance changes, so the sight
+// can be dialed in before any arrow flies; the Start button doubles as the
+// user gesture iOS needs for the motion-sensor permission.
+const SIGHT_KEY = 'archery-sight-v1';
+
+function loadSightStore() {
+  try { return JSON.parse(localStorage.getItem(SIGHT_KEY)) || {}; }
+  catch { return {}; }
+}
+
+function saveSight() {
+  const store = loadSightStore();
+  store[S.dist] = { e: S.sightElev, w: S.sightWind };
+  store.on = S.sightOn;
+  try { localStorage.setItem(SIGHT_KEY, JSON.stringify(store)); } catch {}
+}
+
+function applySavedSight() {
+  const store = loadSightStore();
+  if (typeof store.on === 'boolean') {
+    S.sightOn = store.on;
+    document.getElementById('sight-toggle').checked = store.on;
+  }
+  const s = store[S.dist];
+  if (s) {
+    S.sightElev = clamp(Math.round(+s.e) || 0, -250, 50);
+    S.sightWind = clamp(Math.round(+s.w) || 0, -60, 60);
+  }
+  document.getElementById('sight-elev').value = S.sightElev;
+  document.getElementById('sight-wind').value = S.sightWind;
+  syncSightUI();
+}
+
+function sightModalOpen() {
+  return document.getElementById('sight-modal').style.display === 'block';
+}
+
+function openSightModal() {
+  document.getElementById('sight-modal-title').textContent = `Sight — ${S.dist} m`;
+  document.getElementById('sight-modal').style.display = 'block';
+}
+
+document.getElementById('sight-start-btn').addEventListener('click', () => {
+  document.getElementById('sight-modal').style.display = 'none';
+  // This click is the user gesture iOS needs for the motion permission
+  if (IS_TOUCH && window.DeviceOrientationEvent && !tilt.active && !tiltUserOff) {
+    document.getElementById('tilt-toggle').checked = true;
+    setTilt(true);   // unchecks itself if permission is denied
+  }
+});
+
+document.getElementById('sight-open-btn').addEventListener('click', openSightModal);
+
 // ── Event Listeners ───────────────────────────────────────────────────────────
 document.getElementById('dist-select').addEventListener('change', e => {
   S.dist = +e.target.value;
   lastFlight = null;
   resetAim();
+  applySavedSight();   // each distance has its own saved sight setting
   refreshStats(); render();
+  openSightModal();
 });
 
 document.getElementById('poundage').addEventListener('input', e => {
@@ -1300,23 +1397,26 @@ function fmtTicks(t, neg, pos) {
 function syncSightUI() {
   document.getElementById('v-sight-elev').textContent = fmtTicks(S.sightElev, '↓', '↑');
   document.getElementById('v-sight-wind').textContent = fmtTicks(S.sightWind, '←', '→');
+  document.getElementById('v-sight-summary').textContent =
+    fmtTicks(S.sightElev, '↓', '↑') + ' / ' + fmtTicks(S.sightWind, '←', '→');
   document.getElementById('sight-elev').disabled = !S.sightOn;
   document.getElementById('sight-wind').disabled = !S.sightOn;
+  document.getElementById('sight-open-btn').disabled = !S.sightOn;
 }
 
 document.getElementById('sight-elev').addEventListener('input', e => {
   S.sightElev = +e.target.value;
-  syncSightUI();
+  syncSightUI(); saveSight();
 });
 
 document.getElementById('sight-wind').addEventListener('input', e => {
   S.sightWind = +e.target.value;
-  syncSightUI();
+  syncSightUI(); saveSight();
 });
 
 document.getElementById('sight-toggle').addEventListener('change', e => {
   S.sightOn = e.target.checked;
-  syncSightUI();
+  syncSightUI(); saveSight();
 });
 
 document.querySelectorAll('.spine-btn').forEach(b => {
@@ -1359,27 +1459,16 @@ document.getElementById('dynamic-toggle').addEventListener('change', e => {
   setDynamic(e.target.checked);
 });
 
-document.getElementById('tilt-toggle').addEventListener('change', e => setTilt(e.target.checked));
+let tiltUserOff = false;   // user explicitly disabled tilt — don't re-enable it
+document.getElementById('tilt-toggle').addEventListener('change', e => {
+  tiltUserOff = !e.target.checked;
+  setTilt(e.target.checked);
+});
 
 if (IS_TOUCH) {
   document.getElementById('touch-hint').style.display = 'block';
   document.getElementById('dyn-hint').style.display = 'none';
-  if (window.DeviceOrientationEvent) {
-    document.getElementById('tilt-row').style.display = 'flex';
-    // Start with tilt aiming on. iOS only allows the motion-permission prompt
-    // inside a user gesture, so there it arms on the first touch instead.
-    const autoTilt = () => {
-      document.removeEventListener('pointerdown', autoTilt);
-      if (tilt.active) return;
-      document.getElementById('tilt-toggle').checked = true;
-      setTilt(true);   // unchecks itself if permission is denied
-    };
-    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-      document.addEventListener('pointerdown', autoTilt);
-    } else {
-      autoTilt();
-    }
-  }
+  if (window.DeviceOrientationEvent) document.getElementById('tilt-row').style.display = 'flex';
 }
 
 window.addEventListener('resize', () => { if (!flightAnim) drawFlight(); });
@@ -1387,10 +1476,11 @@ window.addEventListener('resize', () => { if (!flightAnim) drawFlight(); });
 // ── Init ──────────────────────────────────────────────────────────────────────
 refreshStats();
 setDynamic(S.dynamicOn);
-syncSightUI();
+applySavedSight();
 resetAim();
 render();
 requestAnimationFrame(aimLoop);
+openSightModal();
 </script>
 </body>
 </html>
