@@ -233,7 +233,7 @@ input[type="checkbox"] { accent-color: #58a6ff; cursor: pointer; }
 #stat-strip span { color: #58a6ff; }
 #score-popup {
   position: absolute;
-  top: 42%;
+  top: 70px;   /* above the largest target face, never over the rings */
   left: 50%;
   transform: translate(-50%, -50%) scale(0);
   font-size: 2.8rem;
@@ -242,7 +242,7 @@ input[type="checkbox"] { accent-color: #58a6ff; cursor: pointer; }
   z-index: 10;
   opacity: 0;
   transition: transform 0.12s cubic-bezier(.34,1.56,.64,1), opacity 0.4s;
-  text-shadow: 0 0 30px currentColor;
+  text-shadow: 0 0 30px currentColor, 0 1px 4px rgba(0,0,0,0.85);
 }
 #score-popup.show { transform: translate(-50%, -50%) scale(1); opacity: 1; }
 #flight-panel {
