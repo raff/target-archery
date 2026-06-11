@@ -152,6 +152,9 @@ input[type="checkbox"] { accent-color: #58a6ff; cursor: pointer; }
   background: radial-gradient(ellipse at center, #0d2a0d 0%, #080f08 100%);
   position: relative;
   overflow: hidden;
+  touch-action: none;   /* drag anywhere on the range aims instead of scrolling */
+  user-select: none;
+  -webkit-user-select: none;
 }
 #distance-label {
   position: absolute;
@@ -192,9 +195,6 @@ input[type="checkbox"] { accent-color: #58a6ff; cursor: pointer; }
 #canvas-wrap {
   position: relative;
   display: inline-block;
-  touch-action: none;   /* drag on the target aims instead of scrolling */
-  user-select: none;
-  -webkit-user-select: none;
 }
 #target-canvas, #peep-canvas {
   display: block;
@@ -1242,16 +1242,16 @@ async function setTilt(on) {
   tilt.active = true;
 }
 
-// ── Pointer aiming: drag on the target to aim, tap to shoot ──────────────────
-const wrap = document.getElementById('canvas-wrap');
+// ── Pointer aiming: drag anywhere on the range to aim, tap to shoot ──────────
+const aimArea = document.getElementById('target-area');
 let drag = null;
 
-wrap.addEventListener('pointerdown', e => {
+aimArea.addEventListener('pointerdown', e => {
   drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: 0 };
-  wrap.setPointerCapture(e.pointerId);
+  aimArea.setPointerCapture(e.pointerId);
 });
 
-wrap.addEventListener('pointermove', e => {
+aimArea.addEventListener('pointermove', e => {
   if (!drag || e.pointerId !== drag.id) return;
   const rect = tCvs.getBoundingClientRect();
   // 1:1 — the reticle follows the finger/cursor exactly
@@ -1271,14 +1271,14 @@ wrap.addEventListener('pointermove', e => {
   }
 });
 
-wrap.addEventListener('pointerup', e => {
+aimArea.addEventListener('pointerup', e => {
   if (!drag || e.pointerId !== drag.id) return;
   const tap = drag.moved <= 6;
   drag = null;
   if (tap) shoot();
 });
 
-wrap.addEventListener('pointercancel', () => { drag = null; });
+aimArea.addEventListener('pointercancel', () => { drag = null; });
 
 // ── Event Listeners ───────────────────────────────────────────────────────────
 document.getElementById('dist-select').addEventListener('change', e => {
@@ -1364,7 +1364,22 @@ document.getElementById('tilt-toggle').addEventListener('change', e => setTilt(e
 if (IS_TOUCH) {
   document.getElementById('touch-hint').style.display = 'block';
   document.getElementById('dyn-hint').style.display = 'none';
-  if (window.DeviceOrientationEvent) document.getElementById('tilt-row').style.display = 'flex';
+  if (window.DeviceOrientationEvent) {
+    document.getElementById('tilt-row').style.display = 'flex';
+    // Start with tilt aiming on. iOS only allows the motion-permission prompt
+    // inside a user gesture, so there it arms on the first touch instead.
+    const autoTilt = () => {
+      document.removeEventListener('pointerdown', autoTilt);
+      if (tilt.active) return;
+      document.getElementById('tilt-toggle').checked = true;
+      setTilt(true);   // unchecks itself if permission is denied
+    };
+    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+      document.addEventListener('pointerdown', autoTilt);
+    } else {
+      autoTilt();
+    }
+  }
 }
 
 window.addEventListener('resize', () => { if (!flightAnim) drawFlight(); });
