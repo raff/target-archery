@@ -174,6 +174,21 @@ input[type="checkbox"] { accent-color: #58a6ff; cursor: pointer; }
   z-index: 5;
   display: none;
 }
+#ready-banner {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  font-size: 0.75rem;
+  letter-spacing: 1px;
+  background: rgba(22,27,34,0.85);
+  border: 1px solid #30363d;
+  padding: 4px 10px;
+  border-radius: 6px;
+  z-index: 5;
+  display: none;
+}
+#ready-banner.ready { color: #3fb950; border-color: #2ea043; }
+#ready-banner.grab  { color: #ffa657; }
 #canvas-wrap {
   position: relative;
   display: inline-block;
@@ -360,6 +375,7 @@ input[type="checkbox"] { accent-color: #58a6ff; cursor: pointer; }
   <section id="target-area">
     <div id="distance-label">18 m — 40 cm target</div>
     <div id="wind-banner"></div>
+    <div id="ready-banner"></div>
     <div id="canvas-wrap">
       <canvas id="target-canvas" width="500" height="500"></canvas>
       <canvas id="peep-canvas" width="500" height="500"></canvas>
@@ -632,17 +648,20 @@ function drawPeep() {
     return;
   }
 
+  // Reticle dims grey while the bow is released in tilt mode (not ready)
+  const rc = tilt.active && !tilt.grabbed ? '140,150,160' : '0,220,100';
+
   // Scope aperture (aiming ring) — movable
   const aR = Math.max(9, r * 0.09);
   pCtx.beginPath();
   pCtx.arc(rx, ry, aR, 0, Math.PI * 2);
-  pCtx.strokeStyle = 'rgba(0,220,100,0.9)';
+  pCtx.strokeStyle = `rgba(${rc},0.9)`;
   pCtx.lineWidth = 1.5;
   pCtx.stroke();
 
   // Crosshair lines extending from aperture
   const gap = aR * 1.15, ext = aR * 2.8;
-  pCtx.strokeStyle = 'rgba(0,220,100,0.55)';
+  pCtx.strokeStyle = `rgba(${rc},0.55)`;
   pCtx.lineWidth = 0.8;
   pCtx.beginPath();
   pCtx.moveTo(rx - ext, ry); pCtx.lineTo(rx - gap, ry);
@@ -654,7 +673,7 @@ function drawPeep() {
   // Center pin dot
   pCtx.beginPath();
   pCtx.arc(rx, ry, 1.5, 0, Math.PI * 2);
-  pCtx.fillStyle = 'rgba(0,220,100,1)';
+  pCtx.fillStyle = `rgba(${rc},1)`;
   pCtx.fill();
 }
 
@@ -1048,11 +1067,11 @@ function aimLoop(now) {
       tilt.grabbed  = true;        // bow in hand — aim starts at the bottom edge
       tilt.grabRoll = tilt.smR;    // roll re-anchors at every grab
       tilt.grabWind = S.windage;
-      tilt.droop = tilt.sway = 0;
-      swayV = 0;
+      tilt.trimE = 0;
       lowering = null;
     }
   }
+  updateReady();
 
   if (lowering && lowering.delay > 0) {
     lowering.delay -= dt;   // follow-through: hold the aim before lowering
@@ -1064,18 +1083,12 @@ function aimLoop(now) {
     S.windage = lowering.w0 + (lowering.w1 - lowering.w0) * p;
     if (u >= 1) lowering = null;
   } else if (tilt.active && tilt.grabbed) {
-    // Absolute mapping from the grab pose, plus droop & sway to hold against
-    if (S.dynamicOn) {
-      tilt.droop = Math.max(tilt.droop - (AIM.droopBase + S.poundage * AIM.droopPerLb) * dt, -2 * lim);
-      swayV += (Math.random() - 0.5) * 2 * AIM.swayAccel * dt;
-      swayV -= swayV * AIM.swayDamp * dt;
-      swayV  = clamp(swayV, -AIM.swayMax, AIM.swayMax);
-      tilt.sway = clamp(tilt.sway + swayV * dt, -lim, lim);
-    }
+    // Absolute mapping from the grab pose. No simulated droop/sway here — the
+    // hand's own tremor provides the hold instability in tilt mode.
     const kE = 2 * lim / TILT.elevRange;
     const kW = 2 * lim / TILT.windRange;
-    S.elev    = clamp(-lim + (tilt.smP - TILT.grabPitch) * kE + tilt.droop, -lim, lim);
-    S.windage = clamp(tilt.grabWind + (tilt.smR - tilt.grabRoll) * kW + tilt.sway, -lim, lim);
+    S.elev    = clamp(-lim + (tilt.smP - TILT.grabPitch) * kE + tilt.trimE, -lim, lim);
+    S.windage = clamp(tilt.grabWind + (tilt.smR - tilt.grabRoll) * kW, -lim, lim);
   } else {
     let dE = 0, dW = 0;
     if (keys.ArrowUp)    dE += AIM.elevRate;
@@ -1140,7 +1153,7 @@ const tilt = {
   pitch: 0, roll: 0,       // raw screen-oriented reading (° from horizontal)
   smP: null, smR: 0,       // low-pass filtered; smP stays null until the first reading
   grabRoll: 0, grabWind: 0,
-  droop: 0, sway: 0,       // accumulated hold-instability offsets, reset at each grab
+  trimE: 0,                // drag fine-tune offset on elevation, reset at each grab
 };
 const IS_TOUCH = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
@@ -1155,6 +1168,19 @@ function onTilt(e) {
     default:  tilt.pitch =  e.beta;  tilt.roll =  e.gamma;
   }
   if (tilt.smP === null) { tilt.smP = tilt.pitch; tilt.smR = tilt.roll; }
+}
+
+// Ready-to-shoot banner: tells the tilt archer whether the bow is in hand
+let readyState = '';
+function updateReady() {
+  const st = !tilt.active ? '' : tilt.grabbed ? 'ready' : 'grab';
+  if (st === readyState) return;
+  readyState = st;
+  const el = document.getElementById('ready-banner');
+  el.className = st;
+  el.style.display = st ? 'block' : 'none';
+  if (st === 'ready')     el.textContent = '● READY — raise to aim';
+  else if (st === 'grab') el.textContent = '↓ dip device flat to grab the bow';
 }
 
 async function setTilt(on) {
@@ -1204,7 +1230,7 @@ wrap.addEventListener('pointermove', e => {
   if (tilt.active && tilt.grabbed) {
     // Tilt holds the aim — dragging trims its anchors for fine correction
     tilt.grabWind = clamp(tilt.grabWind + dx * degPerPx, -lim, lim);
-    tilt.droop    = clamp(tilt.droop    - dy * degPerPx, -2 * lim, 2 * lim);
+    tilt.trimE    = clamp(tilt.trimE    - dy * degPerPx, -2 * lim, 2 * lim);
   } else {
     S.windage = clamp(S.windage + dx * degPerPx, -lim, lim);
     S.elev    = clamp(S.elev    - dy * degPerPx, -lim, lim);
