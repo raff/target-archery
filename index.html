@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Archery Simulator</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -11,6 +11,7 @@ body {
   color: #c9d1d9;
   font-family: 'Segoe UI', system-ui, sans-serif;
   height: 100vh;
+  height: 100dvh;   /* phones: exclude the browser chrome from the layout height */
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -198,7 +199,7 @@ input[type="checkbox"] { accent-color: #58a6ff; cursor: pointer; }
 }
 #target-canvas, #peep-canvas {
   display: block;
-  width: min(500px, 94vw);
+  width: min(500px, 94vw, 80vh);   /* vh cap keeps it on-screen in short windows */
   height: auto;
   aspect-ratio: 1;
 }
@@ -283,19 +284,92 @@ input[type="checkbox"] { accent-color: #58a6ff; cursor: pointer; }
   color: #58a6ff;
 }
 #sight-modal-note { font-size: 0.72rem; color: #8b949e; line-height: 1.5; }
+#controls-head {
+  display: none;
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+}
+#controls-head h3 {
+  font-size: 0.7rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #8b949e;
+}
+#settings-close {
+  background: none;
+  border: none;
+  color: #8b949e;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+#settings-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(4,8,12,0.5);
+  z-index: 55;
+}
+#mobile-bar {
+  display: none;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+  background: #161b22;
+  border-top: 1px solid #30363d;
+}
+#mobile-bar select { width: auto; flex: 1.3; min-width: 0; }
+#mobile-bar .shoot-btn {
+  width: auto;
+  flex: 1;
+  margin-top: 0;
+  padding: 8px;
+  font-size: 0.8rem;
+  letter-spacing: 2px;
+}
+#settings-btn {
+  flex-shrink: 0;
+  background: #21262d;
+  border: 1px solid #30363d;
+  color: #c9d1d9;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+/* Small screens: target fills the view; controls live in a slide-up sheet
+   opened from the bottom bar, which keeps distance + shoot always at hand */
 @media (max-width: 700px) {
-  main { flex-direction: column-reverse; overflow-y: auto; }
+  main { flex-direction: column; }
   #controls {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
     width: 100%;
+    max-height: 78vh;
     flex-direction: row;
     flex-wrap: wrap;
     border-right: none;
     border-top: 1px solid #30363d;
-    overflow-y: visible;
+    border-radius: 12px 12px 0 0;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom));
+    box-shadow: 0 -8px 30px rgba(0,0,0,0.5);
+    transform: translateY(105%);
+    transition: transform 0.22s ease;
+    z-index: 60;
   }
+  body.settings-open #controls { transform: translateY(0); }
+  body.settings-open #settings-backdrop { display: block; }
+  #controls-head { display: flex; }
   .cg { flex: 1 1 46%; }
   .shoot-btn, .reset-btn { flex: 1 1 100%; }
-  #target-area { flex-shrink: 0; min-height: 70vh; padding: 28px 0 100px; }
+  #target-area { min-height: 0; justify-content: flex-start; padding-top: 32px; }
+  #ready-banner, #wind-banner { top: 32px; }   /* below the centered distance label */
+  #target-canvas, #peep-canvas { width: min(500px, 94vw, 48vh); }
+  #flight-canvas { height: 110px; }
+  #mobile-bar { display: flex; }
 }
 </style>
 </head>
@@ -303,6 +377,10 @@ input[type="checkbox"] { accent-color: #58a6ff; cursor: pointer; }
 <header>Archery Simulator</header>
 <main>
   <aside id="controls">
+    <div id="controls-head">
+      <h3>Settings</h3>
+      <button id="settings-close" aria-label="Close settings">&#10005;</button>
+    </div>
     <div class="cg">
       <h3>Distance</h3>
       <select id="dist-select">
@@ -414,6 +492,19 @@ input[type="checkbox"] { accent-color: #58a6ff; cursor: pointer; }
 </main>
 <div id="flight-panel" class="on">
   <canvas id="flight-canvas" width="800" height="150"></canvas>
+</div>
+<div id="settings-backdrop"></div>
+<div id="mobile-bar">
+  <select id="dist-select-m" aria-label="Distance">
+    <option value="10">10 m</option>
+    <option value="18" selected>18 m</option>
+    <option value="30">30 m</option>
+    <option value="50">50 m</option>
+    <option value="60">60 m</option>
+    <option value="70">70 m</option>
+  </select>
+  <button class="shoot-btn" id="shoot-btn-m">Shoot</button>
+  <button id="settings-btn">&#9881; Settings</button>
 </div>
 <div id="sight-modal">
   <div id="sight-dialog">
@@ -784,6 +875,8 @@ function drawFlight() {
   if (!S.flightOn) return;
   const w = fCvs.parentElement.clientWidth;
   if (w && fCvs.width !== w) fCvs.width = w;
+  const h = fCvs.clientHeight;   // CSS shrinks the panel on small screens
+  if (h && fCvs.height !== h) fCvs.height = h;
   const g = flightGeom();
   fCtx.clearRect(0, 0, g.W, g.H);
 
@@ -1394,6 +1487,7 @@ document.getElementById('sight-open-btn').addEventListener('click', openSightMod
 // ── Event Listeners ───────────────────────────────────────────────────────────
 document.getElementById('dist-select').addEventListener('change', e => {
   S.dist = +e.target.value;
+  document.getElementById('dist-select-m').value = e.target.value;
   lastFlight = null;
   resetAim();
   applySavedSight();   // each distance has its own saved sight setting
@@ -1480,6 +1574,19 @@ document.getElementById('tilt-toggle').addEventListener('change', e => {
   tiltUserOff = !e.target.checked;
   setTilt(e.target.checked);
 });
+
+// ── Mobile bottom bar & settings sheet (small screens only) ──────────────────
+document.getElementById('dist-select-m').addEventListener('change', e => {
+  const main = document.getElementById('dist-select');
+  main.value = e.target.value;
+  main.dispatchEvent(new Event('change'));
+});
+document.getElementById('shoot-btn-m').addEventListener('click', shoot);
+
+function setSettingsOpen(on) { document.body.classList.toggle('settings-open', on); }
+document.getElementById('settings-btn').addEventListener('click', () => setSettingsOpen(true));
+document.getElementById('settings-close').addEventListener('click', () => setSettingsOpen(false));
+document.getElementById('settings-backdrop').addEventListener('click', () => setSettingsOpen(false));
 
 if (IS_TOUCH) {
   document.getElementById('touch-hint').style.display = 'block';
