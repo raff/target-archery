@@ -104,7 +104,7 @@ select:focus { outline: 1px solid #58a6ff; }
 input[type="checkbox"] { accent-color: #58a6ff; cursor: pointer; }
 #wind-details { font-size: 0.72rem; color: #8b949e; }
 #wind-details span { color: #ffa657; font-weight: 600; }
-#new-wind-btn, #tilt-center-btn {
+#new-wind-btn {
   font-size: 0.68rem;
   padding: 2px 6px;
   background: #21262d;
@@ -113,7 +113,7 @@ input[type="checkbox"] { accent-color: #58a6ff; cursor: pointer; }
   border-radius: 3px;
   cursor: pointer;
 }
-#new-wind-btn:hover, #tilt-center-btn:hover { color: #c9d1d9; }
+#new-wind-btn:hover { color: #c9d1d9; }
 .shoot-btn {
   width: 100%;
   padding: 11px;
@@ -325,12 +325,12 @@ input[type="checkbox"] { accent-color: #58a6ff; cursor: pointer; }
       <div class="wind-row" id="tilt-row" style="display:none">
         <input type="checkbox" id="tilt-toggle">
         <label for="tilt-toggle" style="font-size:0.82rem;cursor:pointer">Tilt aiming</label>
-        <button id="tilt-center-btn">Center</button>
       </div>
       <div id="touch-hint" style="display:none;font-size:0.68rem;color:#8b949e;line-height:1.5">
         <b style="color:#58a6ff">Drag</b> on target — aim<br>
         <b style="color:#58a6ff">Tap</b> target — shoot<br>
-        <b style="color:#58a6ff">Tilt</b> device — aim like a bow
+        <b style="color:#58a6ff">Tilt</b> — dip device flat to grab the bow,<br>
+        raise toward vertical to aim, roll for windage
       </div>
     </div>
     <div class="cg">
@@ -1012,6 +1012,7 @@ function resetAim() {
   S.windage = clamp((Math.random() - 0.5) * 0.8, -lim, lim);
   swayV = 0;
   lowering = null;
+  tilt.grabbed = false;   // tilt: dip the device to grab the bow again
 }
 
 // After a shot lands the bow holds steady for a beat (follow-through), then
@@ -1027,6 +1028,7 @@ function startLowering() {
     t: 0, dur: Math.max(0.25, (S.elev - e1) / AIM.lowerRate),
   };
   swayV = 0;
+  tilt.grabbed = false;   // tilt: the bow is released — dip the device to re-grab
 }
 
 function aimLoop(now) {
@@ -1034,9 +1036,23 @@ function aimLoop(now) {
   aimT = now;
   const lim = aimLimDeg();
 
-  const keyHeld  = keys.ArrowUp || keys.ArrowDown || keys.ArrowLeft || keys.ArrowRight;
-  const tiltHeld = tilt.active && (Math.abs(tilt.pitch) > 5 || Math.abs(tilt.roll) > 5);
-  if (lowering && (keyHeld || tiltHeld)) lowering = null;   // archer takes over mid-lowering
+  const keyHeld = keys.ArrowUp || keys.ArrowDown || keys.ArrowLeft || keys.ArrowRight;
+  if (lowering && keyHeld) lowering = null;   // archer takes over mid-lowering
+
+  // Tilt: smooth the sensor, grab the bow when the device dips low enough
+  if (tilt.active && tilt.smP !== null) {
+    const k = 1 - Math.exp(-TILT.smooth * dt);
+    tilt.smP += (tilt.pitch - tilt.smP) * k;
+    tilt.smR += (tilt.roll - tilt.smR) * k;
+    if (!tilt.grabbed && tilt.smP <= TILT.grabPitch) {
+      tilt.grabbed  = true;        // bow in hand — aim starts at the bottom edge
+      tilt.grabRoll = tilt.smR;    // roll re-anchors at every grab
+      tilt.grabWind = S.windage;
+      tilt.droop = tilt.sway = 0;
+      swayV = 0;
+      lowering = null;
+    }
+  }
 
   if (lowering && lowering.delay > 0) {
     lowering.delay -= dt;   // follow-through: hold the aim before lowering
@@ -1047,16 +1063,25 @@ function aimLoop(now) {
     S.elev    = lowering.e0 + (lowering.e1 - lowering.e0) * p;
     S.windage = lowering.w0 + (lowering.w1 - lowering.w0) * p;
     if (u >= 1) lowering = null;
+  } else if (tilt.active && tilt.grabbed) {
+    // Absolute mapping from the grab pose, plus droop & sway to hold against
+    if (S.dynamicOn) {
+      tilt.droop = Math.max(tilt.droop - (AIM.droopBase + S.poundage * AIM.droopPerLb) * dt, -2 * lim);
+      swayV += (Math.random() - 0.5) * 2 * AIM.swayAccel * dt;
+      swayV -= swayV * AIM.swayDamp * dt;
+      swayV  = clamp(swayV, -AIM.swayMax, AIM.swayMax);
+      tilt.sway = clamp(tilt.sway + swayV * dt, -lim, lim);
+    }
+    const kE = 2 * lim / TILT.elevRange;
+    const kW = 2 * lim / TILT.windRange;
+    S.elev    = clamp(-lim + (tilt.smP - TILT.grabPitch) * kE + tilt.droop, -lim, lim);
+    S.windage = clamp(tilt.grabWind + (tilt.smR - tilt.grabRoll) * kW + tilt.sway, -lim, lim);
   } else {
     let dE = 0, dW = 0;
     if (keys.ArrowUp)    dE += AIM.elevRate;
     if (keys.ArrowDown)  dE -= AIM.elevRate;
     if (keys.ArrowLeft)  dW -= AIM.windRate;
     if (keys.ArrowRight) dW += AIM.windRate;
-    if (tilt.active) {
-      dE += tiltRate(tilt.pitch);
-      dW += tiltRate(tilt.roll);
-    }
 
     if (S.dynamicOn) {
       dE -= AIM.droopBase + S.poundage * AIM.droopPerLb;   // constant elevation droop
@@ -1096,40 +1121,47 @@ document.addEventListener('keydown', e => {
 document.addEventListener('keyup', e => { keys[e.code] = false; });
 
 // ── Tilt aiming (tablets / phones) ────────────────────────────────────────────
-// The device acts like the bow: deviation from the calibrated neutral hold
-// steers the aim at a proportional rate (joystick-style), so droop & sway and
-// the post-shot lowering keep working exactly as with the arrow keys.
-const tilt = { active: false, neutral: null, pitch: 0, roll: 0 };
+// The device acts like the bow, gravity-referenced, with a grab/release cycle:
+// after each shot the bow is released — lower the device toward horizontal to
+// grab it (aim anchors at the bottom edge, roll re-anchors), then raise it
+// toward vertical to bring the aim up onto the target. Pitch maps absolutely
+// to elevation from the grab point; roll relative to the grab anchor maps to
+// windage. Re-anchoring at every grab means there is no calibration to drift.
+const TILT = {
+  grabPitch: 30,   // device pitch (° above horizontal) at/below which the bow is grabbed
+  elevRange: 30,   // ° of device pitch that sweeps the aim bottom → top
+  windRange: 20,   // ° of device roll that sweeps the windage left → right
+  smooth:    8,    // sensor low-pass response (1/s) — higher = snappier, noisier
+};
+
+const tilt = {
+  active: false,
+  grabbed: false,
+  pitch: 0, roll: 0,       // raw screen-oriented reading (° from horizontal)
+  smP: null, smR: 0,       // low-pass filtered; smP stays null until the first reading
+  grabRoll: 0, grabWind: 0,
+  droop: 0, sway: 0,       // accumulated hold-instability offsets, reset at each grab
+};
 const IS_TOUCH = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
 function onTilt(e) {
   if (e.beta == null || e.gamma == null) return;
   // Remap device axes to screen pitch/roll for the current orientation
   const angle = (((screen.orientation && screen.orientation.angle) ?? window.orientation ?? 0) + 360) % 360;
-  let pitch, roll;
   switch (angle) {
-    case 90:  pitch =  e.gamma; roll = -e.beta;  break;
-    case 180: pitch = -e.beta;  roll = -e.gamma; break;
-    case 270: pitch = -e.gamma; roll =  e.beta;  break;
-    default:  pitch =  e.beta;  roll =  e.gamma;
+    case 90:  tilt.pitch =  e.gamma; tilt.roll = -e.beta;  break;
+    case 180: tilt.pitch = -e.beta;  tilt.roll = -e.gamma; break;
+    case 270: tilt.pitch = -e.gamma; tilt.roll =  e.beta;  break;
+    default:  tilt.pitch =  e.beta;  tilt.roll =  e.gamma;
   }
-  if (!tilt.neutral) tilt.neutral = { pitch, roll };   // first reading = neutral hold
-  tilt.pitch = pitch - tilt.neutral.pitch;
-  tilt.roll  = roll  - tilt.neutral.roll;
-}
-
-// Tilt (°) past a small dead zone → aim rate (°/s), capped
-function tiltRate(d) {
-  const dead = 1.5, span = 14, max = 2.2;
-  const a = Math.abs(d) - dead;
-  if (a <= 0) return 0;
-  return Math.sign(d) * Math.min(1, a / span) * max;
+  if (tilt.smP === null) { tilt.smP = tilt.pitch; tilt.smR = tilt.roll; }
 }
 
 async function setTilt(on) {
   if (!on) {
     window.removeEventListener('deviceorientation', onTilt);
     tilt.active = false;
+    tilt.grabbed = false;
     return;
   }
   // iOS 13+ requires an explicit permission request from a user gesture
@@ -1144,8 +1176,8 @@ async function setTilt(on) {
       return;
     }
   }
-  tilt.neutral = null;
-  tilt.pitch = tilt.roll = 0;
+  tilt.smP = null;
+  tilt.grabbed = false;
   window.addEventListener('deviceorientation', onTilt);
   tilt.active = true;
 }
@@ -1262,7 +1294,6 @@ document.getElementById('dynamic-toggle').addEventListener('change', e => {
 });
 
 document.getElementById('tilt-toggle').addEventListener('change', e => setTilt(e.target.checked));
-document.getElementById('tilt-center-btn').addEventListener('click', () => { tilt.neutral = null; });
 
 if (IS_TOUCH) {
   document.getElementById('touch-hint').style.display = 'block';

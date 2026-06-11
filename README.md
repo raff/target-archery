@@ -14,7 +14,7 @@ Browser-based target archery simulator. Single-file, no build step — open `ind
 4. Choose **arrow spine** offset (−2 to +2). Spine 0 = optimal for your poundage.
 5. Set the **sight** (tick-based, like a real sight): the elevation/windage sliders move the sight pin in 0.05° clicks. Moving the sight **down** forces you to raise the bow to re-center the pin, so the arrow hits **higher** — use the **Ref:** value as the starting elevation setting. Uncheck **Use sight** to shoot instinctive/gap style (no pin, no offsets — just a faint focus dot).
 6. Aim with the **arrow keys** — the cursor starts at the bottom of the view each time, so you raise the bow onto the target for every arrow. With **Bow droop & sway** on (the default), elevation constantly droops and windage sways randomly, so you must actively hold the position. Press **Space** to shoot. You can also **drag** on the target with the mouse to aim and **click** it to shoot.
-7. On a **tablet or phone**: **drag** on the target to aim, **tap** it to shoot. On devices with motion sensors a **Tilt aiming** checkbox appears in the Aiming section — enable it (iOS asks for motion-sensor permission) and the device steers the aim like a bow: tilt away from your neutral hold to move the cursor, hold steady to stay on the gold. The **Center** button re-calibrates the neutral hold. Motion sensors require HTTPS, so tilt works on the hosted site but not from a local `file://` open on iOS.
+7. On a **tablet or phone**: **drag** on the target to aim, **tap** it to shoot. On devices with motion sensors a **Tilt aiming** checkbox appears in the Aiming section — enable it (iOS asks for motion-sensor permission) and the device becomes the bow: **dip it down toward horizontal to grab the bow**, then **raise it toward vertical** to bring the aim up onto the target, and **roll** it left/right for windage. After every shot the bow is released — dip the device down again to grab it for the next arrow, like re-raising a real bow. Motion sensors require HTTPS, so tilt works on the hosted site but not from a local `file://` open on iOS.
 8. Optionally enable **wind** — a random wind is generated; click "New" to reroll it.
 9. Press **SHOOT** (or **Space**). The arrow lands according to physics + scatter. Score appears as a popup and is added to the running total.
 10. **Clear Arrows** resets the group while keeping settings.
@@ -225,9 +225,15 @@ Pointer events on `#canvas-wrap` provide a keyboard-free aiming path: dragging m
 
 #### Tilt aiming (tablets / phones)
 
-On touch devices that expose `DeviceOrientationEvent`, a **Tilt aiming** checkbox appears (on iOS 13+ enabling it calls `DeviceOrientationEvent.requestPermission()`, which must come from a user gesture — the checkbox tap). The first sensor reading after enabling becomes the **neutral hold**; the *Center* button re-zeros it at any time.
+On touch devices that expose `DeviceOrientationEvent`, a **Tilt aiming** checkbox appears (on iOS 13+ enabling it calls `DeviceOrientationEvent.requestPermission()`, which must come from a user gesture — the checkbox tap).
 
-Tilt is deliberately a **rate (joystick) input**, not an absolute mapping: deviation from neutral past a 1.5° dead zone steers the aim at up to 2.2 °/s (linear over a 14° span). This composes with the existing mechanics unchanged — droop still pulls the aim down (you keep gently tilting up to fight it, like holding a bow at full draw), sway still wanders, and the post-shot lowering glide works as with keys (a deliberate tilt > 5° interrupts it). Device axes (`beta`/`gamma`) are remapped to screen pitch/roll per `screen.orientation.angle`, so portrait and both landscape orientations all work.
+Tilt is **gravity-referenced and absolute**, with a grab/release cycle that mirrors the real shot cycle:
+
+- **Release** — after every shot (and on enable / distance change) the bow is released: tilt input detaches and the usual lowering glide brings the cursor to the bottom edge.
+- **Grab** — dipping the device to ≤ `TILT.grabPitch` = 30° above horizontal grabs the bow: the aim attaches at the bottom edge, and the device's roll at that moment becomes the windage anchor.
+- **Aim** — while grabbed, pitch maps absolutely to elevation: raising the device through `TILT.elevRange` = 30° sweeps the aim bottom → top (target center ≈ 45° device pitch). Roll relative to the grab anchor maps to windage over `TILT.windRange` = 20°.
+
+Because the pitch reference is gravity itself and the roll anchor resets at every grab, there is no calibration to drift — each arrow starts from a clean anchor. Sensor readings are low-pass filtered in the aim loop (`TILT.smooth` = 8 /s) to suppress hand jitter. With *Bow droop & sway* on, droop and sway accumulate as offsets the archer must counter by tilting further — like holding against a bow at full draw. While the bow is grabbed, tilt owns the aim (arrow keys / drag are overridden); tap the target or press SHOOT to loose. Device axes (`beta`/`gamma`) are remapped to screen pitch/roll per `screen.orientation.angle`, so portrait and both landscape orientations all work.
 
 Sensor events require a secure context (HTTPS), so tilt works on the GitHub Pages site but not from a local `file://` open on iOS.
 
@@ -279,7 +285,7 @@ Arrows from a different distance are stored but not rendered on the current targ
 | `AIM.droopBase` / `droopPerLb` | 0.05 / 0.002 °/s | Elevation droop rate (base + per lb) |
 | `AIM.elevRate` / `windRate` | 0.9 / 0.7 °/s | Key correction speeds |
 | `AIM.swayAccel` / `swayDamp` / `swayMax` | 0.9 °/s² / 0.5 /s / 0.3 °/s | Windage random-sway dynamics |
-| Tilt dead zone / span / max rate | 1.5° / 14° / 2.2 °/s | Device-tilt → aim-rate mapping (`tiltRate()`) |
+| `TILT.grabPitch` / `elevRange` / `windRange` / `smooth` | 30° / 30° / 20° / 8 /s | Tilt grab threshold, pitch→elevation and roll→windage spans, sensor low-pass |
 
 ---
 
