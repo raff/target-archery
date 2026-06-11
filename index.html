@@ -1063,18 +1063,18 @@ function aimLoop(now) {
     const k = 1 - Math.exp(-TILT.smooth * dt);
     tilt.smP += (tilt.pitch - tilt.smP) * k;
     tilt.smR += (tilt.roll - tilt.smR) * k;
-    // First grab is immediate (any pose); re-grabs need a dip back down near
-    // the previous grab pose — "lower the bow" relative to how it's held.
+    // The first grab is immediate and centers the aim range on that pose; the
+    // anchor then stays fixed for the session, so raising back to the same
+    // pose always returns the aim to the same spot. Re-grabs after a shot
+    // need a dip back down near the bottom of the range ("lower the bow").
     if (!tilt.grabbed && (tilt.anchor === null || tilt.smP <= tilt.anchor + TILT.regrabSlack)) {
-      tilt.grabbed  = true;        // bow in hand — aim starts at the bottom edge
-      tilt.anchor   = tilt.smP;    // this pose = bottom of the aim range
+      tilt.grabbed = true;
+      if (tilt.anchor === null) tilt.anchor = tilt.smP - TILT.elevRange / 2;
       tilt.grabRoll = tilt.smR;    // roll re-anchors at every grab
       tilt.grabWind = S.windage;
       tilt.trimE = 0;
       lowering = null;
     }
-    // Dipping below the anchor while grabbed lowers the range floor with it
-    if (tilt.grabbed && tilt.smP < tilt.anchor) tilt.anchor = tilt.smP;
   }
   updateReady();
 
@@ -1140,11 +1140,12 @@ document.addEventListener('keyup', e => { keys[e.code] = false; });
 
 // ── Tilt aiming (tablets / phones) ────────────────────────────────────────────
 // The device acts like the bow, with a grab/release cycle relative to however
-// the user comfortably holds it: the pose where the bow is grabbed becomes the
-// bottom of the aim range, raising the device from there sweeps the aim up,
-// and after each shot the bow is released — dip back down near the grab pose
-// to take it in hand again. Both pitch and roll re-anchor at every grab, so
-// any holding angle works and there is no calibration to drift.
+// the user comfortably holds it: enabling tilt centers the aim range on that
+// pose for the whole session, raising/lowering the device sweeps the aim, and
+// after each shot the bow is released — dip down near the bottom of the range
+// to take it in hand again, then raise back onto the target. The pitch anchor
+// is fixed per session (same pose = same aim); roll re-anchors at every grab.
+// Toggling tilt off/on re-centers the range on a new pose.
 const TILT = {
   regrabSlack: 5,  // ° above the last grab pose that still counts as a re-grab dip
   elevRange: 30,   // ° of device pitch that sweeps the aim bottom → top
@@ -1170,11 +1171,10 @@ const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
 // while deviceorientation beta/gamma stay portrait-referenced — held in
 // portrait the angle reads 90 and the aim axes come out swapped (tilting
 // left looked like a dip-to-grab). The legacy window.orientation shares the
-// sensor's reference frame on iOS, so prefer it there (negated: iOS counts
-// rotation in the opposite direction from the Screen Orientation spec).
+// sensor's reference frame on iOS, so prefer it there.
 function sensorScreenAngle() {
   if (IS_IOS && typeof window.orientation === 'number')
-    return ((-window.orientation % 360) + 360) % 360;
+    return ((window.orientation % 360) + 360) % 360;
   const a = (screen.orientation && screen.orientation.angle) ?? window.orientation ?? 0;
   return ((a % 360) + 360) % 360;
 }
