@@ -344,8 +344,8 @@ input[type="checkbox"] { accent-color: #58a6ff; cursor: pointer; }
       <div id="touch-hint" style="display:none;font-size:0.68rem;color:#8b949e;line-height:1.5">
         <b style="color:#58a6ff">Drag</b> on target — aim<br>
         <b style="color:#58a6ff">Tap</b> target — shoot<br>
-        <b style="color:#58a6ff">Tilt</b> — dip device flat to grab the bow,<br>
-        raise toward vertical to aim, roll for windage
+        <b style="color:#58a6ff">Tilt</b> — dip device down to grab the bow,<br>
+        raise to aim, roll for windage
       </div>
     </div>
     <div class="cg">
@@ -1063,13 +1063,18 @@ function aimLoop(now) {
     const k = 1 - Math.exp(-TILT.smooth * dt);
     tilt.smP += (tilt.pitch - tilt.smP) * k;
     tilt.smR += (tilt.roll - tilt.smR) * k;
-    if (!tilt.grabbed && tilt.smP <= TILT.grabPitch) {
+    // First grab is immediate (any pose); re-grabs need a dip back down near
+    // the previous grab pose — "lower the bow" relative to how it's held.
+    if (!tilt.grabbed && (tilt.anchor === null || tilt.smP <= tilt.anchor + TILT.regrabSlack)) {
       tilt.grabbed  = true;        // bow in hand — aim starts at the bottom edge
+      tilt.anchor   = tilt.smP;    // this pose = bottom of the aim range
       tilt.grabRoll = tilt.smR;    // roll re-anchors at every grab
       tilt.grabWind = S.windage;
       tilt.trimE = 0;
       lowering = null;
     }
+    // Dipping below the anchor while grabbed lowers the range floor with it
+    if (tilt.grabbed && tilt.smP < tilt.anchor) tilt.anchor = tilt.smP;
   }
   updateReady();
 
@@ -1087,7 +1092,7 @@ function aimLoop(now) {
     // hand's own tremor provides the hold instability in tilt mode.
     const kE = 2 * lim / TILT.elevRange;
     const kW = 2 * lim / TILT.windRange;
-    S.elev    = clamp(-lim + (tilt.smP - TILT.grabPitch) * kE + tilt.trimE, -lim, lim);
+    S.elev    = clamp(-lim + (tilt.smP - tilt.anchor) * kE + tilt.trimE, -lim, lim);
     S.windage = clamp(tilt.grabWind + (tilt.smR - tilt.grabRoll) * kW, -lim, lim);
   } else {
     let dE = 0, dW = 0;
@@ -1134,14 +1139,14 @@ document.addEventListener('keydown', e => {
 document.addEventListener('keyup', e => { keys[e.code] = false; });
 
 // ── Tilt aiming (tablets / phones) ────────────────────────────────────────────
-// The device acts like the bow, gravity-referenced, with a grab/release cycle:
-// after each shot the bow is released — lower the device toward horizontal to
-// grab it (aim anchors at the bottom edge, roll re-anchors), then raise it
-// toward vertical to bring the aim up onto the target. Pitch maps absolutely
-// to elevation from the grab point; roll relative to the grab anchor maps to
-// windage. Re-anchoring at every grab means there is no calibration to drift.
+// The device acts like the bow, with a grab/release cycle relative to however
+// the user comfortably holds it: the pose where the bow is grabbed becomes the
+// bottom of the aim range, raising the device from there sweeps the aim up,
+// and after each shot the bow is released — dip back down near the grab pose
+// to take it in hand again. Both pitch and roll re-anchor at every grab, so
+// any holding angle works and there is no calibration to drift.
 const TILT = {
-  grabPitch: 30,   // device pitch (° above horizontal) at/below which the bow is grabbed
+  regrabSlack: 5,  // ° above the last grab pose that still counts as a re-grab dip
   elevRange: 30,   // ° of device pitch that sweeps the aim bottom → top
   windRange: 32,   // ° of device roll that sweeps the windage left → right
   smooth:    8,    // sensor low-pass response (1/s) — higher = snappier, noisier
@@ -1152,6 +1157,7 @@ const tilt = {
   grabbed: false,
   pitch: 0, roll: 0,       // raw screen-oriented reading (° from horizontal)
   smP: null, smR: 0,       // low-pass filtered; smP stays null until the first reading
+  anchor: null,            // pitch at the last grab = bottom of the aim range
   grabRoll: 0, grabWind: 0,
   trimE: 0,                // drag fine-tune offset on elevation, reset at each grab
 };
@@ -1191,7 +1197,7 @@ function updateReady() {
   el.className = st;
   el.style.display = st ? 'block' : 'none';
   if (st === 'ready')     el.textContent = '● READY — raise to aim';
-  else if (st === 'grab') el.textContent = '↓ dip device flat to grab the bow';
+  else if (st === 'grab') el.textContent = '↓ dip device down to grab the bow';
 }
 
 async function setTilt(on) {
@@ -1214,6 +1220,7 @@ async function setTilt(on) {
     }
   }
   tilt.smP = null;
+  tilt.anchor = null;
   tilt.grabbed = false;
   window.addEventListener('deviceorientation', onTilt);
   tilt.active = true;
