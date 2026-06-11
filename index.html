@@ -1130,7 +1130,7 @@ document.addEventListener('keyup', e => { keys[e.code] = false; });
 const TILT = {
   grabPitch: 30,   // device pitch (° above horizontal) at/below which the bow is grabbed
   elevRange: 30,   // ° of device pitch that sweeps the aim bottom → top
-  windRange: 20,   // ° of device roll that sweeps the windage left → right
+  windRange: 32,   // ° of device roll that sweeps the windage left → right
   smooth:    8,    // sensor low-pass response (1/s) — higher = snappier, noisier
 };
 
@@ -1201,8 +1201,14 @@ wrap.addEventListener('pointermove', e => {
   drag.moved += Math.abs(dx) + Math.abs(dy);
   if (drag.moved > 6) lowering = null;   // archer takes over mid-lowering
   const lim = aimLimDeg();
-  S.windage = clamp(S.windage + dx * degPerPx, -lim, lim);
-  S.elev    = clamp(S.elev    - dy * degPerPx, -lim, lim);
+  if (tilt.active && tilt.grabbed) {
+    // Tilt holds the aim — dragging trims its anchors for fine correction
+    tilt.grabWind = clamp(tilt.grabWind + dx * degPerPx, -lim, lim);
+    tilt.droop    = clamp(tilt.droop    - dy * degPerPx, -2 * lim, 2 * lim);
+  } else {
+    S.windage = clamp(S.windage + dx * degPerPx, -lim, lim);
+    S.elev    = clamp(S.elev    - dy * degPerPx, -lim, lim);
+  }
 });
 
 wrap.addEventListener('pointerup', e => {
