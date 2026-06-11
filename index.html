@@ -1162,6 +1162,22 @@ const tilt = {
   trimE: 0,                // drag fine-tune offset on elevation, reset at each grab
 };
 const IS_TOUCH = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+               (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform));
+
+// Screen rotation relative to the sensor's portrait-natural device frame.
+// iPadOS quirk: screen.orientation.angle can be referenced to landscape,
+// while deviceorientation beta/gamma stay portrait-referenced — held in
+// portrait the angle reads 90 and the aim axes come out swapped (tilting
+// left looked like a dip-to-grab). The legacy window.orientation shares the
+// sensor's reference frame on iOS, so prefer it there (negated: iOS counts
+// rotation in the opposite direction from the Screen Orientation spec).
+function sensorScreenAngle() {
+  if (IS_IOS && typeof window.orientation === 'number')
+    return ((-window.orientation % 360) + 360) % 360;
+  const a = (screen.orientation && screen.orientation.angle) ?? window.orientation ?? 0;
+  return ((a % 360) + 360) % 360;
+}
 
 function onTilt(e) {
   if (e.beta == null || e.gamma == null) return;
@@ -1173,7 +1189,7 @@ function onTilt(e) {
   const ux = -Math.sin(g) * Math.cos(b);
   const uy =  Math.sin(b);
   // Project onto the screen's up/right axes for the current orientation
-  const angle = (((screen.orientation && screen.orientation.angle) ?? window.orientation ?? 0) + 360) % 360;
+  const angle = sensorScreenAngle();
   let su, sr;
   switch (angle) {
     case 90:  su = -ux; sr =  uy; break;
