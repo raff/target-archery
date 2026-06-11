@@ -1008,7 +1008,8 @@ const SCORE_COLORS = {
 };
 
 function shoot() {
-  if (sightModalOpen()) return;   // no stray arrows while adjusting the sight
+  if (sightModalOpen()) return;             // no stray arrows while adjusting the sight
+  if (tilt.active && !tilt.grabbed) return; // bow not in hand — dip to grab first
   const le = launchElev(), lw = launchWind();
   const hit   = computeHit(le, lw);
   const score = getScore(hit.x, hit.y);
@@ -1203,20 +1204,23 @@ const tilt = {
   trimE: 0,                // drag fine-tune offset on elevation, reset at each grab
 };
 const IS_TOUCH = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-               (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform));
+// Latched screen orientation, auto-detected from gravity: in any playable
+// hold, the device axis best aligned with "up" IS screen-up. Detection and
+// axis mapping share one convention by construction, so the aim directions
+// can never come out reversed — unlike screen.orientation.angle and
+// window.orientation, which iPadOS reports inconsistently.
+let tiltOrient = 0;
 
-// Screen rotation relative to the sensor's portrait-natural device frame.
-// iPadOS quirk: screen.orientation.angle can be referenced to landscape,
-// while deviceorientation beta/gamma stay portrait-referenced — held in
-// portrait the angle reads 90 and the aim axes come out swapped (tilting
-// left looked like a dip-to-grab). The legacy window.orientation shares the
-// sensor's reference frame on iOS, so prefer it there.
-function sensorScreenAngle() {
-  if (IS_IOS && typeof window.orientation === 'number')
-    return ((window.orientation % 360) + 360) % 360;
-  const a = (screen.orientation && screen.orientation.angle) ?? window.orientation ?? 0;
-  return ((a % 360) + 360) % 360;
+// Orientation flipped mid-session (or device rotated): the old pitch anchor is
+// meaningless in the new frame, so re-center on the next reading and pause in
+// the sight dialog for a clean re-entry.
+function tiltReorient() {
+  const hadSession = tilt.anchor !== null;
+  tilt.anchor = null;
+  tilt.smP = null;
+  tilt.grabbed = false;
+  tilt.trimE = 0;
+  if (hadSession) openSightModal();
 }
 
 function onTilt(e) {
@@ -1228,10 +1232,22 @@ function onTilt(e) {
   const b = e.beta * Math.PI / 180, g = e.gamma * Math.PI / 180;
   const ux = -Math.sin(g) * Math.cos(b);
   const uy =  Math.sin(b);
-  // Project onto the screen's up/right axes for the current orientation
-  const angle = sensorScreenAngle();
+
+  // Update the latched orientation only on a clear reading: device raised
+  // enough (in-plane gravity > 0.35 g) and one axis clearly dominant, so
+  // normal aiming banks (±16°) can never flip it.
+  const ax = Math.abs(ux), ay = Math.abs(uy);
+  if (Math.hypot(ux, uy) > 0.35 && Math.max(ax, ay) > 1.3 * Math.min(ax, ay)) {
+    const o = ax > ay ? (ux > 0 ? 270 : 90) : (uy > 0 ? 0 : 180);
+    if (o !== tiltOrient) {
+      tiltOrient = o;
+      tiltReorient();
+    }
+  }
+
+  // Project onto the screen's up/right axes for the latched orientation
   let su, sr;
-  switch (angle) {
+  switch (tiltOrient) {
     case 90:  su = -ux; sr =  uy; break;
     case 180: su = -uy; sr = -ux; break;
     case 270: su =  ux; sr = -uy; break;
