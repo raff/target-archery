@@ -1159,14 +1159,25 @@ const IS_TOUCH = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
 function onTilt(e) {
   if (e.beta == null || e.gamma == null) return;
-  // Remap device axes to screen pitch/roll for the current orientation
+  // Reconstruct the "up" direction (opposite gravity) in device coordinates.
+  // Raw beta/gamma flip representation when the device passes vertical
+  // (e.g. pitch 95° reports as beta=180, gamma=-85), which used to fake a
+  // dip-to-grab; the gravity vector is continuous there.
+  const b = e.beta * Math.PI / 180, g = e.gamma * Math.PI / 180;
+  const ux = -Math.sin(g) * Math.cos(b);
+  const uy =  Math.sin(b);
+  // Project onto the screen's up/right axes for the current orientation
   const angle = (((screen.orientation && screen.orientation.angle) ?? window.orientation ?? 0) + 360) % 360;
+  let su, sr;
   switch (angle) {
-    case 90:  tilt.pitch =  e.gamma; tilt.roll = -e.beta;  break;
-    case 180: tilt.pitch = -e.beta;  tilt.roll = -e.gamma; break;
-    case 270: tilt.pitch = -e.gamma; tilt.roll =  e.beta;  break;
-    default:  tilt.pitch =  e.beta;  tilt.roll =  e.gamma;
+    case 90:  su = -ux; sr =  uy; break;
+    case 180: su = -uy; sr = -ux; break;
+    case 270: su =  ux; sr = -uy; break;
+    default:  su =  uy; sr =  ux;
   }
+  const R2D = 180 / Math.PI;
+  tilt.pitch = Math.asin(clamp(su, -1, 1)) * R2D;    // ° of screen-up above horizontal
+  tilt.roll  = Math.asin(clamp(-sr, -1, 1)) * R2D;   // ° of bank, + = right edge down
   if (tilt.smP === null) { tilt.smP = tilt.pitch; tilt.smR = tilt.roll; }
 }
 
